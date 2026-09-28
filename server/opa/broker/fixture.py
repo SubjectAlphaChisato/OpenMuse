@@ -213,7 +213,8 @@ class FixtureBackend:
             s["next_message"] = n + 1
             m = {"id": f"m{n:03d}", "thread_id": f"t{n}", "from": c["from"], "to": ", ".join(c["to"]), "cc": ", ".join(c["cc"]),
                  "bcc": ", ".join(c["bcc"]), "subject": c["subject"], "body": c["body"], "date": now, "labels": ["SENT"],
-                 "message_id_header": c["message_id_header"]}
+                 "message_id_header": c["message_id_header"],
+                 "attachments": [{k: a[k] for k in ("name", "mime", "size", "sha256")} for a in c.get("attachments", [])]}
             s["messages"].append(m)
             return {"data": {"message_id": m["id"], "thread_id": m["thread_id"]}, "provider_refs": [f"gmail:{m['id']}"]}
         if tool == "calendar.create_event":

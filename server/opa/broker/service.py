@@ -16,6 +16,7 @@ from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from opa.broker import attachments as attach
 from opa.broker import ops
 from opa.broker.fixture import FixtureBackend
 from opa.broker.google import scopes as gscopes
@@ -203,6 +204,7 @@ class Broker:
                 raise ConnectorError("invalid_input", "reads do not need approval; call the tool directly")
             conn = await self._connection(db, ctx.owner_id, connection_id, tool.capability, tool.effect, tool)
             backend = self.backend(conn)
+            files = await attach.resolve(db, ctx.owner_id, arguments.get("attachments") or [], conn.provider) if tool.name == "gmail.send_message" else None
         now = self.clock.now()
         if tool.effect == "read":
             ops.validate_schema(tool, arguments)
@@ -212,7 +214,7 @@ class Broker:
             if tool.name == "calendar.update_event":
                 ops.validate_schema(tool, arguments)
                 current = await backend.get_event(arguments["calendar_id"], arguments["event_id"])
-            canonical, key = ops.canonicalize_write(tool, arguments, now, account=conn.account_label, current=current)
+            canonical, key = ops.canonicalize_write(tool, arguments, now, account=conn.account_label, current=current, attachments=files)
         return {
             "tool_name": tool.name, "tool_version": tool.version, "effect": tool.effect, "connection_id": conn.id,
             "canonical_args": canonical, "args_hash": args_hash(tool.name, tool.version, canonical),
@@ -234,15 +236,17 @@ class Broker:
                 approval = await db.scalar(select(Approval).where(Approval.action_id == action.id, Approval.state == "approved"))
                 tool = ops.get_tool(action.tool_name)
                 recomputed = args_hash(action.tool_name, action.tool_version, action.canonical_args)
-                if approval is None or not (recomputed == action.args_hash == approval.args_hash):
+                # M4: approved attachment bytes must be unchanged (exists, still current, same SHA-256 on disk).
+                changed = await attach.verify(db, self.settings, action.owner_id, action.canonical_args.get("attachments") or [])
+                if approval is None or not (recomputed == action.args_hash == approval.args_hash) or changed:
                     action.state = "cancelled"
-                    action.error = {"code": "approval_required", "message": "payload does not match the approved version"}
+                    action.error = {"code": "approval_required", "message": changed or "payload does not match the approved version"}
                     if approval is not None:
                         approval.state = "invalidated"
-                        approval.reason = "payload changed after approval"
+                        approval.reason = changed or "payload changed after approval"
                     await self._audit(db, action.owner_id, "action.integrity_violation", action.id, {"tool": action.tool_name})
                     await emit(db, action.owner_id, "action.cancelled", {"reason": "integrity"}, task_id=task_id, action_id=action.id)
-                    return ToolResult.fail("approval_required", "the payload changed after approval; a new approval is required")
+                    return ToolResult.fail("approval_required", f"{changed}; a new approval is required" if changed else "the payload changed after approval; a new approval is required")
                 if approval.expires_at <= now:
                     action.state, approval.state = "expired", "expired"
                     return ToolResult.fail("approval_required", "the approval expired")

@@ -63,6 +63,8 @@ TOOLS: dict[str, ToolDefinition] = {
                 "subject": {"type": "string"},
                 "body": {"type": "string"},
                 "in_reply_to_message_id": NULLABLE_STR,
+                "attachments": {"type": "array", "description": "Files to attach: the artifact ID and its current version. The owner approves these exact bytes.",
+                                "items": _obj({"artifact_id": {"type": "string"}, "version": {"type": "integer"}})},
             }),
             side_effects="Sends an email from the connected account. Sent email cannot be recalled.",
         ),
@@ -185,9 +187,13 @@ def new_message_id_header(domain: str) -> str:
     return f"<opa.{secrets.token_hex(12)}@{domain}>"
 
 
-def canonicalize_write(tool: ToolDefinition, args: dict[str, Any], now: datetime, *, account: str, current: dict[str, Any] | None = None) -> tuple[dict[str, Any], str | None]:
+def canonicalize_write(tool: ToolDefinition, args: dict[str, Any], now: datetime, *, account: str, current: dict[str, Any] | None = None,
+                       attachments: list[dict[str, Any]] | None = None) -> tuple[dict[str, Any], str | None]:
     """Validate a proposed write and return (canonical_args, provider_idempotency_key).
-    `current` is the provider's current event for update_event, fetched by the broker."""
+    `current` is the provider's current event for update_event, fetched by the broker.
+    `attachments` are the broker-resolved {artifact_id, version, name, mime, size, sha256} records (M4)."""
+    if tool.name == "gmail.send_message":
+        args = {"attachments": [], **args}  # optional for callers that predate attachments
     validate_schema(tool, args)
     if tool.name == "gmail.send_message":
         to = _check_emails("to", args["to"])
@@ -201,6 +207,12 @@ def canonicalize_write(tool: ToolDefinition, args: dict[str, Any], now: datetime
             raise ConnectorError("invalid_input", "subject must be one line of at most 998 characters")
         domain = account.split("@", 1)[-1] if "@" in account else "localhost"
         canonical = {**args, "to": to, "cc": cc, "bcc": bcc, "from": account, "message_id_header": new_message_id_header(domain)}
+        # Attachment references become exact version digests, so the approval hash covers the bytes (A02).
+        canonical.pop("attachments")
+        if args["attachments"]:
+            if not attachments or len(attachments) != len(args["attachments"]):
+                raise ConnectorError("invalid_input", "attachments must be resolved to exact file versions")
+            canonical["attachments"] = attachments
         return canonical, None
     if tool.name == "calendar.create_event":
         _check_window(args["start"], args["end"], now, args["confirm_past"])
@@ -249,7 +261,8 @@ def preview(tool_name: str, canonical: dict[str, Any], *, account: str) -> dict[
             {"label": "Bcc", "value": ", ".join(canonical["bcc"]) or "—"},
             {"label": "Subject", "value": canonical["subject"]},
             {"label": "Body", "value": canonical["body"], "multiline": True},
-            {"label": "Attachments", "value": "none"},
+            {"label": "Attachments", "value": "; ".join(f"{a['name']} (version {a['version']}, {a['size']} bytes, SHA-256 {a['sha256'][:12]}…)"
+                                                        for a in canonical.get("attachments", [])) or "none"},
         ]
     elif tool.name == "calendar.create_event":
         title = "Create calendar event"

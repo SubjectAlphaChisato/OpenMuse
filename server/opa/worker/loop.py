@@ -25,8 +25,10 @@ from opa.core.ids import new_id
 from opa.core.settings import Settings
 from opa.db.models import Action, Approval, Conversation, Job, Owner, Task
 from opa.db.outbox import emit
+from opa.memory.retrieval import assemble as assemble_memory
 from opa.sdk.contract import ConnectorError, ToolRequest
 from opa.worker.model import GenerateResult, ModelAdapter
+from opa.worker.output_tools import OutputTools, latest_owner_message
 from opa.worker.tools import LocalTools
 
 log = logging.getLogger("opa.worker")
@@ -68,6 +70,7 @@ class Worker:
         self._stop = asyncio.Event()
         self._lost = False
         self.tools = LocalTools()
+        self.outputs = OutputTools(settings, sessionmaker, self.clock)  # M4: artifact and memory tools
 
     # ---------- lifecycle ----------
     def stop(self) -> None:
@@ -171,7 +174,14 @@ class Worker:
             budget_ext = ck.get("budget_extension", 0)
             outputs: dict[str, Any] = dict(ck.get("outputs") or {})
             approval_mode = owner.preferences.get("approval_mode", "ask_writes")
-            state = {"messages": messages, "usage": usage, "outputs": outputs, "started": started}
+            state = {"messages": messages, "usage": usage, "outputs": outputs, "started": started,
+                     "owner_id": task.owner_id, "conversation_id": task.conversation_id}
+            # MEM-01: deterministic retrieval once per run; the IDs are recorded on the task and its checkpoint.
+            memory = await assemble_memory(db, task.owner_id, task.conversation_id, f"{task.intent}\n{latest_owner_message(messages)}",
+                                           self.settings.memory_context_chars)
+            task.injected_memory_ids = memory.ids
+            task.checkpoint = {**task.checkpoint, "injected_memory_ids": memory.ids}
+            system = SYSTEM_PROMPT + (f"\n\n{memory.block}" if memory.block else "")
 
         broker_tools: dict[str, dict[str, Any]] = {}
         if self.broker is not None:
@@ -180,7 +190,7 @@ class Worker:
                     broker_tools[t["name"]] = t
             except (BrokerUnavailable, ConnectorError) as e:
                 log.warning("broker tools unavailable: %s", e)
-        tool_defs = self.tools.definitions() + [{"name": t["name"], "description": t["description"], "input_schema": t["input_schema"]} for t in broker_tools.values()]
+        tool_defs = self.tools.definitions() + self.outputs.definitions() + [{"name": t["name"], "description": t["description"], "input_schema": t["input_schema"]} for t in broker_tools.values()]
 
         try:
             if pending:
@@ -199,7 +209,7 @@ class Worker:
                 if (time.monotonic() - started) > limits.get("max_active_seconds", 600) * mult:
                     raise Blocked("budget_exceeded", "active runtime budget reached")
 
-                result: GenerateResult = await self.model.generate(messages, tool_defs, {**limits, "task_id": task_id}, system=SYSTEM_PROMPT)
+                result: GenerateResult = await self.model.generate(messages, tool_defs, {**limits, "task_id": task_id}, system=system)
                 usage["model_calls"] = usage.get("model_calls", 0) + 1
                 usage["input_tokens"] = usage.get("input_tokens", 0) + result.usage.get("input_tokens", 0)
                 usage["output_tokens"] = usage.get("output_tokens", 0) + result.usage.get("output_tokens", 0)
@@ -257,7 +267,11 @@ class Worker:
                             results.append({"type": "tool_result", "tool_use_id": call.id, "is_error": res.status != "succeeded",
                                             "content": _result_text(res.status, res.data, res.error.model_dump() if res.error else None)})
                     else:
-                        outcome = await self.tools.execute(call.name, call.input, owner_id=state.get("owner_id", ""), task_id=task_id)
+                        if call.name in self.outputs.names:
+                            outcome = await self.outputs.execute(call.name, call.input, owner_id=state["owner_id"], task_id=task_id, lease_token=token,
+                                                                 conversation_id=state["conversation_id"], owner_message=latest_owner_message(messages))
+                        else:
+                            outcome = await self.tools.execute(call.name, call.input, owner_id=state.get("owner_id", ""), task_id=task_id)
                         if outcome.get("output_key"):
                             outputs[outcome["output_key"]] = {"value": outcome.get("output_value"), "confirmed": outcome.get("ok", False)}
                         results.append({"type": "tool_result", "tool_use_id": call.id, "content": outcome["content"], "is_error": not outcome.get("ok", False)})
@@ -366,7 +380,8 @@ class Worker:
             await self._fenced(db, task_id, token)
             task = await db.get(Task, task_id)
             conv = await db.get(Conversation, task.conversation_id)
-            msg = await add_message(db, conv, "assistant", final_text, task_id=task.id)
+            files = [v["value"]["artifact_id"] for k, v in state["outputs"].items() if k.startswith("artifact:") and isinstance(v.get("value"), dict)]
+            msg = await add_message(db, conv, "assistant", final_text, task_id=task.id, artifact_ids=files)
             state["outputs"]["final_message"] = {"value": msg.id, "confirmed": True}
             self._apply_checkpoint(task, state, extra={"step": "done"})
             task.current_step = "completed"

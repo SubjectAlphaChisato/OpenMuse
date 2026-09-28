@@ -11,6 +11,8 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from opa.api.routers import approvals, auth, connections, conversations, events, oauth, tasks
+from opa.api.routers.artifacts import router as artifacts_router  # M4
+from opa.api.routers.memory import router as memory_router  # M4
 from opa.core.clock import Clock, SystemClock
 from opa.core.errors import ApiError
 from opa.core.settings import Settings, get_settings
@@ -66,6 +68,8 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None, ses
     app.include_router(connections.router)
     app.include_router(approvals.router)
     app.include_router(oauth.router)
+    app.include_router(artifacts_router)
+    app.include_router(memory_router)
 
     if settings.web_dist_dir and Path(settings.web_dist_dir, "index.html").is_file():
         dist = Path(settings.web_dist_dir).resolve()
