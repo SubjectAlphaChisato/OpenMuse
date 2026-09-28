@@ -53,3 +53,19 @@ del { color: #b3261e; }
 label.block { display: block; margin: 6px 0; }
 ul.plain { list-style: none; padding: 0; display: grid; gap: 6px; }
 .card .badge { margin-left: 6px; }
+
+/* M4: Files and Memory */
+a.button { display: inline-block; padding: 6px 12px; border: 1px solid #888; border-radius: 6px; background: #fff; color: inherit; text-decoration: none; }
+a:focus-visible, summary:focus-visible, h3[tabindex]:focus-visible { outline: 3px solid #1f5fd1; outline-offset: 2px; }
+.two-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+label.block input, label.block textarea { display: block; width: 100%; margin-top: 4px; }
+tr.selected { background: #eef3ff; }
+.detail > * + * { margin-top: 8px; }
+.detail > a.button, .detail > button, .detail > label { margin-right: 6px; }
+.meta { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0; }
+.meta dt { font-weight: 600; } .meta dd { margin: 0; overflow-wrap: anywhere; }
+.notice { background: #fff4ce; padding: 8px; border-radius: 6px; }
+.preview { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 12px; max-height: 480px; overflow: auto; }
+pre.preview { white-space: pre-wrap; }
+.files-created { font-size: 13px; }
+.mem-list li p { margin: 0 0 6px; }

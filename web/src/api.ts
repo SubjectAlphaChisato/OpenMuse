@@ -33,6 +33,7 @@ export class ApiError extends Error {
 
 let csrf = "";
 export function setCsrf(token: string) { csrf = token; }
+export function csrfToken() { return csrf; } // M4: raw-body uploads
 
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = {};
@@ -76,6 +77,7 @@ export function subscribe(onEvent: (type: string) => void): () => void {
   const types = ["task.queued", "task.running", "task.waiting_user", "task.waiting_approval", "task.blocked", "approval.requested", "approval.decided",
     "action.succeeded", "action.failed", "action.unknown", "action.cancelled", "connection.updated", "connection.disconnected", "connection.connected",
     "task.succeeded", "task.failed", "task.cancelled", "message.created", "conversation.deleted"];
+  types.push("artifact.created", "artifact.updated", "artifact.deleted", "memory.updated"); // M4
   types.forEach((t) => es.addEventListener(t, handler));
   return () => es.close();
 }
@@ -110,3 +112,5 @@ export const api2 = {
   disconnect: (c: Connection) => req<Connection>("DELETE", `/api/connections/${c.id}`),
   setApprovalMode: (mode: "ask_writes" | "always_ask") => req<Me>("PATCH", "/api/me", { approval_mode: mode }),
 };
+
+export { req }; // M4: used by apiM4.ts
