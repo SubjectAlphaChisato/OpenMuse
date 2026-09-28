@@ -11,6 +11,7 @@ x-app-db: &app-db
 x-internal: &internal
   OPA_INTERNAL_TOKEN: ${OPA_INTERNAL_TOKEN:?set OPA_INTERNAL_TOKEN in .env}
   OPA_BROKER_URL: http://broker:8081
+  OPA_ARTIFACT_DIR: /data/artifacts   # M4: api and worker write, broker reads attachments
 
 services:
   postgres:
@@ -51,7 +52,7 @@ services:
       OPA_BIND_HOST: 0.0.0.0
       OPA_WEB_DIST_DIR: /web
     ports: ["127.0.0.1:8080:8080"]   # localhost only (AUTH-01); see README for HTTPS
-    volumes: [webdist:/web:ro]
+    volumes: [webdist:/web:ro, artifacts:/data/artifacts]
     depends_on:
       migrate: { condition: service_completed_successfully }
       web-build: { condition: service_completed_successfully }
@@ -64,6 +65,7 @@ services:
     environment:
       <<: [*app-db, *internal]
       OPA_MODEL_PROXY: http://egress-proxy:3128
+    volumes: [artifacts:/data/artifacts]
     depends_on: { migrate: { condition: service_completed_successfully } }
     networks: [internal, model-egress]   # no route to the internet except through egress-proxy
 
@@ -76,6 +78,7 @@ services:
       OPA_BIND_HOST: 0.0.0.0
       OPA_DATABASE_URL: postgresql+asyncpg://opa_broker:${OPA_BROKER_DB_PASSWORD}@postgres:5432/opa
       OPA_BROKER_KEK: "${OPA_BROKER_KEK:?generate one with opa generate-kek}"
+    volumes: [artifacts:/data/artifacts:ro]   # M4: verifies approved attachment bytes; never writes files
     depends_on: { migrate: { condition: service_completed_successfully } }
     networks: [internal, provider-egress]
 
@@ -94,3 +97,4 @@ networks:
 volumes:
   pgdata: {}
   webdist: {}
+  artifacts: {}
