@@ -2,8 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, api2, ApiError, Conversation, Me, Message, Notification, setCsrf, subscribe, Task, TaskState } from "./api";
 import { Approvals } from "./screens/Approvals";
 import { Connections } from "./screens/Connections";
+import { ArtifactLinks, Files } from "./screens/Files"; // M4
+import { Memory } from "./screens/Memory"; // M4
 
-type Screen = "chat" | "tasks" | "approvals" | "notifications" | "connections";
+type Screen = "chat" | "tasks" | "approvals" | "notifications" | "connections" | "files" | "memory";
 
 const STATE_LABEL: Record<TaskState, string> = {
   queued: "Queued", running: "Running", waiting_approval: "Needs approval", waiting_user: "Needs your reply",
@@ -78,7 +80,8 @@ function Shell({ me: initialMe, onLogout }: { me: Me; onLogout: () => void }) {
     if (type === "connection.reauth_required") setLive("A connected account needs reconnecting.");
   }), []);
   useEffect(() => { api2.approvals().then((a) => setPending(a.length)).catch(() => undefined); }, [tick]);
-  const labels: Record<Screen, string> = { chat: "Chat", tasks: "Tasks", approvals: "Approvals", notifications: "Notifications", connections: "Connections" };
+  const labels: Record<Screen, string> = { chat: "Chat", tasks: "Tasks", approvals: "Approvals", notifications: "Notifications", connections: "Connections", files: "Files", memory: "Memory" };
+  const [fileFocus, setFileFocus] = useState<string>(""); // M4: open a file from a chat message
 
   return (
     <div className="shell">
@@ -100,17 +103,19 @@ function Shell({ me: initialMe, onLogout }: { me: Me; onLogout: () => void }) {
       )}
       <div role="status" aria-live="polite" className="sr-only">{live}</div>
       <main>
-        {screen === "chat" && <Chat tick={tick} />}
+        {screen === "chat" && <Chat tick={tick} onOpenFile={(id) => { setFileFocus(id); setScreen("files"); }} />}
         {screen === "tasks" && <Tasks tick={tick} />}
         {screen === "approvals" && <Approvals tick={tick} announce={setLive} />}
         {screen === "notifications" && <Notifications tick={tick} />}
         {screen === "connections" && <Connections me={me} tick={tick} onMe={setMe} announce={setLive} notice={notice} />}
+        {screen === "files" && <Files tick={tick} announce={setLive} focusId={fileFocus || undefined} />}
+        {screen === "memory" && <Memory tick={tick} announce={setLive} />}
       </main>
     </div>
   );
 }
 
-function Chat({ tick }: { tick: number }) {
+function Chat({ tick, onOpenFile }: { tick: number; onOpenFile: (id: string) => void }) {
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [active, setActive] = useState<string>("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -152,6 +157,7 @@ function Chat({ tick }: { tick: number }) {
               <h3 className="sr-only">{m.role === "user" ? "You" : m.role === "system" ? "System" : "Assistant"}</h3>
               <p>{m.content}</p>
               {t && m.role === "user" && <TaskChip task={t} />}
+              <ArtifactLinks ids={m.artifact_ids} onOpen={onOpenFile} />
             </li>
           );
         })}

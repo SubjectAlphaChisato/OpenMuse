@@ -33,6 +33,7 @@ export class ApiError extends Error {
 
 let csrf = "";
 export function setCsrf(token: string) { csrf = token; }
+export function csrfToken() { return csrf; } // M4: raw-body uploads
 
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = {};
@@ -76,6 +77,7 @@ export function subscribe(onEvent: (type: string) => void): () => void {
   const types = ["task.queued", "task.running", "task.waiting_user", "task.waiting_approval", "task.blocked", "approval.requested", "approval.decided",
     "action.succeeded", "action.failed", "action.unknown", "action.cancelled", "connection.updated", "connection.disconnected", "connection.connected", "connection.reauth_required",
     "task.succeeded", "task.failed", "task.cancelled", "message.created", "conversation.deleted"];
+  types.push("artifact.created", "artifact.updated", "artifact.deleted", "memory.updated"); // M4
   types.forEach((t) => es.addEventListener(t, handler));
   return () => es.close();
 }
@@ -116,3 +118,5 @@ export const api2 = {
     req<{ authorization_url: string; scopes: string[] }>("POST", "/api/connectors/google/authorize", { modes, connection_id: connectionId ?? null }),
   health: (c: Connection) => req<{ status: string; detail: string | null }>("POST", `/api/connections/${c.id}/health`),
 };
+
+export { req }; // M4: used by apiM4.ts

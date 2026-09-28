@@ -125,6 +125,18 @@ def proxy(listen: str = "0.0.0.0:3128", allow: list[str] = typer.Option(..., hel
     asyncio.run(run())
 
 
+@app.command("artifacts-gc")
+def artifacts_gc(min_age_minutes: int = 60) -> None:
+    """Delete artifact files that no version references (failed uploads, deleted files). ART-01."""
+    from datetime import timedelta
+
+    from opa.artifacts.service import gc_orphans
+    from opa.db.engine import get_sessionmaker
+
+    removed = asyncio.run(gc_orphans(get_sessionmaker(), get_settings(), timedelta(minutes=min_age_minutes)))
+    typer.echo(f"removed {removed} unreferenced file(s)")
+
+
 @app.command("generate-kek")
 def generate_kek() -> None:
     """Print a new broker key-encryption key for OPA_BROKER_KEK."""

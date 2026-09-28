@@ -7,4 +7,6 @@ COPY server/pyproject.toml ./
 COPY server/opa ./opa
 COPY server/alembic.ini ./
 RUN pip install --no-cache-dir .
+# M4: artifact volume mount point, owned by the runtime user so a new named volume inherits it
+RUN mkdir -p /data/artifacts && chown opa:opa /data/artifacts
 USER opa
