@@ -1,0 +1,96 @@
+# Open Personal Agent — local deployment through milestone M2.
+# Trust boundaries follow docs/tech-design.md section 2:
+#   * `internal` has no route to the internet; postgres, api, worker, broker share it.
+#   * the worker's only external route is the egress proxy (model host allowlist) on `model-egress`.
+#   * only the broker joins `provider-egress` for provider APIs; only the api publishes a port (localhost).
+#   * api and worker use the opa_app role; the broker uses opa_broker; migrations use the owner role.
+name: opa
+
+x-app-db: &app-db
+  OPA_DATABASE_URL: postgresql+asyncpg://opa_app:${OPA_APP_DB_PASSWORD:?}@postgres:5432/opa
+x-internal: &internal
+  OPA_INTERNAL_TOKEN: ${OPA_INTERNAL_TOKEN:?set OPA_INTERNAL_TOKEN in .env}
+  OPA_BROKER_URL: http://broker:8081
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: opa
+      POSTGRES_USER: opa
+      POSTGRES_PASSWORD: ${OPA_DB_PASSWORD:?set OPA_DB_PASSWORD in .env}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opa -d opa"]
+      interval: 5s
+      retries: 20
+
+  migrate:
+    build: { context: .., dockerfile: deploy/Dockerfile.server }
+    command: ["sh", "-c", "opa migrate && opa db-roles"]
+    environment:
+      OPA_DATABASE_URL: postgresql+asyncpg://opa:${OPA_DB_PASSWORD}@postgres:5432/opa
+      OPA_APP_DB_PASSWORD: ${OPA_APP_DB_PASSWORD:?set OPA_APP_DB_PASSWORD in .env}
+      OPA_BROKER_DB_PASSWORD: ${OPA_BROKER_DB_PASSWORD:?set OPA_BROKER_DB_PASSWORD in .env}
+    depends_on: { postgres: { condition: service_healthy } }
+    networks: [internal]
+
+  web-build:
+    build: { context: .., dockerfile: deploy/Dockerfile.web, target: build }
+    command: ["sh", "-c", "cp -r /web/dist/. /dist/"]
+    volumes: [webdist:/dist]
+    network_mode: none
+
+  api:
+    build: { context: .., dockerfile: deploy/Dockerfile.server }
+    command: ["opa", "api"]
+    env_file: ../.env
+    environment:
+      <<: [*app-db, *internal]
+      OPA_BIND_HOST: 0.0.0.0
+      OPA_WEB_DIST_DIR: /web
+    ports: ["127.0.0.1:8080:8080"]   # localhost only (AUTH-01); see README for HTTPS
+    volumes: [webdist:/web:ro]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      web-build: { condition: service_completed_successfully }
+    networks: [internal, frontend]
+
+  worker:
+    build: { context: .., dockerfile: deploy/Dockerfile.server }
+    command: ["opa", "worker"]
+    env_file: ../.env
+    environment:
+      <<: [*app-db, *internal]
+      OPA_MODEL_PROXY: http://egress-proxy:3128
+    depends_on: { migrate: { condition: service_completed_successfully } }
+    networks: [internal, model-egress]   # no route to the internet except through egress-proxy
+
+  broker:
+    build: { context: .., dockerfile: deploy/Dockerfile.server }
+    command: ["opa", "broker"]
+    environment:
+      <<: *internal
+      OPA_MODE: ${OPA_MODE:-demo}
+      OPA_BIND_HOST: 0.0.0.0
+      OPA_DATABASE_URL: postgresql+asyncpg://opa_broker:${OPA_BROKER_DB_PASSWORD}@postgres:5432/opa
+      OPA_BROKER_KEK: "${OPA_BROKER_KEK:?generate one with opa generate-kek}"
+    depends_on: { migrate: { condition: service_completed_successfully } }
+    networks: [internal, provider-egress]
+
+  egress-proxy:
+    build: { context: .., dockerfile: deploy/Dockerfile.server }
+    command: ["opa", "proxy", "--listen", "0.0.0.0:3128", "--allow", "api.anthropic.com:443"]
+    networks: [model-egress, outbound]
+
+networks:
+  internal: { internal: true }
+  model-egress: { internal: true }
+  frontend: {}          # published port; the api is the only member
+  provider-egress: {}   # broker's route to provider APIs
+  outbound: {}          # egress-proxy's route to the model host
+
+volumes:
+  pgdata: {}
+  webdist: {}

@@ -1,0 +1,5 @@
+# Keep only safe portable manifests in git; everything else here is local.
+*
+!.gitignore
+!project.json
+!product-journey.json

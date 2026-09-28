@@ -1,0 +1,206 @@
+"""End-to-end UI smoke: real Postgres, API process serving web/dist, worker process, headless Chromium.
+
+Usage: .venv/bin/python scripts/ui_smoke.py [--screenshots DIR]
+Requires `npm run build` in ../web first.
+"""
+from __future__ import annotations
+
+import argparse
+import os
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.request
+from pathlib import Path
+
+import pgserver
+from playwright.sync_api import expect, sync_playwright
+
+ROOT = Path(__file__).resolve().parents[1]
+DIST = ROOT.parent / "web" / "dist"
+EMAIL, PASSWORD, PORT, BROKER_PORT = "ui@example.com", "ui-smoke-password-123", 8098, 8097
+SCRIPT = """
+match:
+  - contains: "Email Priya"
+    steps:
+      - tool_calls:
+          - name: gmail__send_message
+            input: {connection_id: "@auto", to: [priya@partner.example], cc: [], bcc: [], subject: Metrics for Thursday, body: "Hi Priya, here are the metrics.", in_reply_to_message_id: null}
+      - text: Sent the email to Priya.
+default: {text: "OK. (scripted model)"}
+"""
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--screenshots", default=None)
+    args = ap.parse_args()
+    if not (DIST / "index.html").exists():
+        print("web/dist missing; run npm run build in web/")
+        return 2
+
+    pgdir = tempfile.mkdtemp(prefix="opa-ui-pg-")
+    srv = pgserver.get_server(pgdir)
+    url = srv.get_uri().replace("postgresql://", "postgresql+asyncpg://")
+    script_path = Path(pgdir) / "script.yaml"
+    script_path.write_text(SCRIPT)
+    env = dict(os.environ, OPA_DATABASE_URL=url, OPA_BIND_PORT=str(PORT), OPA_MODE="demo", OPA_MODEL_PROVIDER="scripted",
+               OPA_WEB_DIST_DIR=str(DIST), OPA_INTERNAL_TOKEN="smoke-internal-token", OPA_BROKER_URL=f"http://127.0.0.1:{BROKER_PORT}",
+               OPA_BROKER_BIND_PORT=str(BROKER_PORT), OPA_SCRIPTED_MODEL_PATH=str(script_path))
+    procs: list[subprocess.Popen] = []
+    try:
+        subprocess.run([str(ROOT / ".venv/bin/opa"), "migrate"], env=env, check=True, capture_output=True)
+        subprocess.run([str(ROOT / ".venv/bin/python"), "-c", _BOOTSTRAP], env=env, check=True)
+        procs.append(subprocess.Popen([str(ROOT / ".venv/bin/opa"), "api"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+        procs.append(subprocess.Popen([str(ROOT / ".venv/bin/opa"), "broker"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+        procs.append(subprocess.Popen([str(ROOT / ".venv/bin/opa"), "worker"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+        _wait_http(f"http://127.0.0.1:{PORT}/healthz")
+        _wait_http(f"http://127.0.0.1:{BROKER_PORT}/internal/health")
+        return _drive(f"http://127.0.0.1:{PORT}", args.screenshots or tempfile.mkdtemp(prefix="opa-ui-fail-"))
+    finally:
+        for p in procs:
+            p.send_signal(signal.SIGINT)
+            try:
+                p.wait(5)
+            except subprocess.TimeoutExpired:
+                p.kill()
+        srv.cleanup()
+        shutil.rmtree(pgdir, ignore_errors=True)
+
+
+_BOOTSTRAP = f"""
+import asyncio
+from opa.api.auth import hash_password
+from opa.db.engine import get_sessionmaker
+from opa.db.models import Owner
+async def go():
+    async with get_sessionmaker()() as db, db.begin():
+        db.add(Owner(email={EMAIL!r}, password_hash=hash_password({PASSWORD!r})))
+asyncio.run(go())
+"""
+
+
+def _wait_http(url: str, timeout: float = 15) -> None:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            urllib.request.urlopen(url, timeout=1)
+            return
+        except Exception:
+            time.sleep(0.2)
+    raise RuntimeError(f"{url} did not come up")
+
+
+def _drive(base: str, shots: str | None) -> int:
+    def snap(page, name):
+        if shots:
+            Path(shots).mkdir(parents=True, exist_ok=True)
+            page.screenshot(path=str(Path(shots) / f"{name}.png"), full_page=True)
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1100, "height": 800})
+        errors: list[str] = []
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.on("response", lambda r: print(f"  api {r.request.method} {r.url.split(str(PORT))[-1]} -> {r.status}") if "/api/" in r.url and (r.status >= 400 or os.environ.get("SMOKE_VERBOSE")) and not r.url.endswith("/api/me") else None)
+        page.on("console", lambda m: print("  console:", m.text) if m.type == "error" else None)
+
+        page.goto(base)
+        expect(page.get_by_role("heading", name="Sign in")).to_be_visible()
+        # keyboard-only sign-in
+        page.get_by_label("Email").focus()
+        page.keyboard.type(EMAIL)
+        page.keyboard.press("Tab")
+        page.keyboard.type(PASSWORD)
+        page.keyboard.press("Enter")
+        expect(page.get_by_label("Demo mode: no real provider calls")).to_be_visible()
+        print("PASS sign-in by keyboard; DEMO badge visible")
+        snap(page, "1-chat-empty")
+
+        page.get_by_role("textbox", name="Message").fill("Summarize my week")
+        page.keyboard.press("Enter")
+        messages = page.get_by_role("list", name="Messages")
+        expect(messages.get_by_text("Summarize my week")).to_be_visible()
+        expect(messages.get_by_text("OK. (scripted model)")).to_be_visible(timeout=10_000)
+        expect(messages.get_by_text("Task: Done")).to_be_visible(timeout=10_000)
+        print("PASS message sent, worker reply rendered live, task chip shows Done")
+        snap(page, "2-chat-reply")
+
+        page.get_by_role("button", name="Tasks").click()
+        expect(page.get_by_role("heading", name="Tasks")).to_be_visible()
+        row = page.get_by_role("row").filter(has_text="Summarize my week")
+        expect(row.get_by_text("Task: Done")).to_be_visible()
+        row.get_by_role("button", name="Retry").click()
+        expect(page.get_by_role("row").filter(has_text="(retry)")).to_have_count(1, timeout=10_000)
+        print("PASS tasks screen lists task; Retry creates linked task")
+        snap(page, "3-tasks")
+
+        page.get_by_role("button", name="Notifications").click()
+        expect(page.get_by_text("Task completed").first).to_be_visible()
+        page.get_by_role("button", name="Mark read").first.click()
+        print("PASS notification inbox shows completion; mark-read works")
+        snap(page, "4-notifications")
+
+        try:
+            _m2(page, snap)
+        except Exception:
+            snap(page, "FAILED")
+            print("FAIL screenshot saved to", shots)
+            raise
+        page.get_by_role("button", name="Sign out").click()
+        expect(page.get_by_role("heading", name="Sign in")).to_be_visible()
+        print("PASS sign-out returns to login")
+        browser.close()
+
+        if errors:
+            print("FAIL page errors:", errors)
+            return 1
+    print("UI smoke passed")
+    return 0
+
+
+def _m2(page, snap) -> None:
+        # ---- M2: connect a demo account, allow Gmail changes, approve an email by keyboard
+        page.get_by_role("button", name="Connections").click()
+        page.get_by_role("button", name="Connect", exact=True).click()
+        acct = page.get_by_role("article", name="demo@example.test (demo)")
+        expect(acct).to_be_visible()
+        expect(acct.get_by_label("Gmail")).to_have_value("read_only")  # read only by default
+        acct.get_by_label("Gmail").select_option("read_write")
+        expect(acct.get_by_label("Gmail")).to_have_value("read_write")
+        expect(acct.get_by_label("Calendar")).to_have_value("read_only")
+        snap(page, "5-connections")
+
+        page.get_by_role("button", name="Chat").click()
+        expect(page.get_by_role("button", name="Send")).to_be_enabled()
+        page.get_by_role("textbox", name="Message").fill("Email Priya the metrics")
+        page.keyboard.press("Enter")
+        expect(page.get_by_role("button", name="Approvals, 1 waiting")).to_be_visible(timeout=10_000)
+        expect(page.get_by_text("Task: Needs approval")).to_be_visible()
+        print("PASS proposal pauses the task and raises an approval count")
+
+        page.get_by_role("button", name="Approvals, 1 waiting").click()
+        card = page.get_by_role("article", name="Send email")
+        expect(card.get_by_text("priya@partner.example").first).to_be_visible()
+        expect(card.get_by_text("Hi Priya, here are the metrics.")).to_be_visible()
+        expect(card.get_by_text("Sent email cannot be recalled", exact=False)).to_be_visible()
+        snap(page, "6-approval-card")
+        card.get_by_role("button", name="Deny").focus()
+        page.keyboard.press("Shift+Tab")  # keyboard-only: move to Allow once and press Enter
+        expect(card.get_by_role("button", name="Allow once")).to_be_focused()
+        page.keyboard.press("Enter")
+        expect(page.get_by_text("Nothing is waiting for your approval.")).to_be_visible(timeout=10_000)
+        print("PASS approval card shows exact recipients and body; allowed with keyboard only")
+
+        page.get_by_role("button", name="Chat").click()
+        expect(page.get_by_role("list", name="Messages").get_by_text("Sent the email to Priya.")).to_be_visible(timeout=10_000)
+        expect(page.get_by_text("Task: Done").last).to_be_visible()
+        print("PASS worker dispatched through the broker after approval; task completed")
+        snap(page, "7-chat-after-send")
+
+
+if __name__ == "__main__":
+    sys.exit(main())

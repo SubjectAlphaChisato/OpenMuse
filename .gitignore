@@ -1,0 +1,13 @@
+.env
+.DS_Store
+__pycache__/
+*.pyc
+server/.venv/
+server/data/
+web/node_modules/
+web/dist/
+.lingcode/*.local*
+.pytest_cache/
+.ruff_cache/
+.mcp.json
+*.tsbuildinfo

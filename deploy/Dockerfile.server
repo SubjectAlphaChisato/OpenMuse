@@ -1,0 +1,10 @@
+# Server image: api, worker (and later broker/scheduler/browser) share one image with different commands.
+FROM python:3.12-slim AS base
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+RUN useradd --create-home --uid 10001 opa
+WORKDIR /app
+COPY server/pyproject.toml ./
+COPY server/opa ./opa
+COPY server/alembic.ini ./
+RUN pip install --no-cache-dir .
+USER opa
