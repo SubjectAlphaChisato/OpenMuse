@@ -19,25 +19,15 @@ class Extracted:
     pages: int | None = None
 
 
-def _limit_child(cpu_seconds: int) -> None:  # runs in the child between fork and exec
-    try:
-        import resource
-
-        resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds + 1))
-        resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-    except (ImportError, ValueError, OSError):
-        pass
-
-
 async def run_pdf_extraction(data: bytes, *, timeout: float, max_chars: int, cmd: Sequence[str] | None = None) -> Extracted:
     """Raise FileRejected('extraction_timeout' | 'unsupported_format' | 'invalid_file') on failure.
     `cmd` replaces the child command (tests use it to simulate a hanging parser)."""
-    argv = list(cmd) if cmd else [sys.executable, "-m", "opa.artifacts.extract_worker", str(max_chars)]
-    cpu = max(1, int(timeout) + 1)
+    cpu = max(1, int(timeout) + 1)  # the child applies this CPU rlimit to itself (no preexec_fn in a threaded server)
+    argv = list(cmd) if cmd else [sys.executable, "-m", "opa.artifacts.extract_worker", str(max_chars), str(cpu)]
     env = {"PATH": os.environ.get("PATH", ""), "PYTHONPATH": os.pathsep.join(p for p in sys.path if p), "LANG": "C.UTF-8"}
     proc = await asyncio.create_subprocess_exec(
         *argv, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
-        env=env, preexec_fn=lambda: _limit_child(cpu),  # the child only sets rlimits before exec
+        env=env,
     )
     try:
         out, _ = await asyncio.wait_for(proc.communicate(input=data), timeout=timeout)

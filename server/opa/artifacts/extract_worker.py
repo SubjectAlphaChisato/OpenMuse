@@ -1,7 +1,8 @@
-"""Child-process PDF text extraction. Run as `python -m opa.artifacts.extract_worker MAX_CHARS`.
+"""Child-process PDF text extraction. Run as `python -m opa.artifacts.extract_worker MAX_CHARS CPU_SECONDS`.
 
-Reads PDF bytes on stdin, writes one JSON object on stdout. It has no database or network
-access and is killed by the parent after the extraction timeout (ART-01).
+Reads PDF bytes on stdin, writes one JSON object on stdout. It opens no database connection or
+network request, limits its own CPU time, and is killed by the parent after the extraction
+timeout (ART-01). It is not OS-sandboxed (see tech-design section 19).
 """
 from __future__ import annotations
 
@@ -44,10 +45,12 @@ def extract(data: bytes, max_chars: int) -> dict:
 
 
 def main() -> None:
+    cpu = int(sys.argv[2]) if len(sys.argv) > 2 else 31
     try:
         import resource
 
         resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+        resource.setrlimit(resource.RLIMIT_CPU, (cpu, cpu + 1))
     except (ImportError, ValueError, OSError):
         pass
     max_chars = int(sys.argv[1]) if len(sys.argv) > 1 else 2_000_000
