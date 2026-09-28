@@ -460,3 +460,13 @@ Scripted adapter: loads a YAML script keyed by step number with fixed tool calls
 7. **One proposal per model turn.** If a turn contains several writes, the first is proposed and the rest receive a tool error asking the model to propose them after the first is decided.
 8. **Fixture state belongs to the broker.** The demo account's mailbox and calendar live in `broker.fixture_state` and are created by the broker on first use, so the application role never writes to the broker schema.
 9. **Column-level grants for the broker role.** The broker reads only `owners(id, preferences)`, `tasks(id, owner_id, state)`, and the lease columns of `jobs`, plus connections, actions, and approvals. Insert-returning needs `id` and `created_at` on events, notifications, and audit rows; no content columns are readable.
+
+## 19. Decisions recorded during M3
+
+1. **REST over httpx instead of google-api-python-client.** The Gmail and Calendar adapters call the REST endpoints directly with an async client. This keeps them async, lets one injected transport serve OAuth and API calls in tests, and makes error mapping explicit.
+2. **One HTTP library for Google traffic.** Authlib 1.8 prefers `httpx2` (installed by the Anthropic SDK 1.x). All Google code imports the same library through `opa/broker/google/http.py`.
+3. **The broker exchanges the code.** The API validates the state and passes the code and PKCE verifier to the broker, which alone holds the client secret and tokens. The API stores only scopes and connection metadata.
+4. **The broker picks the connection for a Google account.** Signing in again with the same account reuses its connection; signing in with a different account during a reconnect adds a separate connection and says so.
+5. **Conservative write errors.** A connect failure before sending is a definite failure; any later transport error or 5xx on a write is `unknown` and goes through reconciliation. A 401 is retried once after refresh because Google rejects it before processing.
+6. **Column-level update for the broker.** The broker may update only `status`, `last_error`, `last_health_at`, `version`, and `updated_at` on connections, to record reauthorization and health.
+7. **Search withholds by snippet.** Gmail search returns metadata only, so sensitive-mail filtering on search results uses the snippet; full bodies are filtered when fetched.

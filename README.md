@@ -2,7 +2,7 @@
 
 A self-hostable personal agent: persistent chat, durable background tasks, and (in later milestones) Gmail and Google Calendar connectors with enforced human approval for every external write.
 
-**Status: milestones M1 (Foundation) and M2 (Broker and approvals) of six.** See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md). Connectors run against a built-in demo account only; real Google sign-in, artifacts, memory, scheduling, and the browser are not built yet.
+**Status: milestones M1 to M3 of six.** See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md). Gmail and Google Calendar are implemented, with live verification against Google still pending; a built-in demo account works without any credentials. Artifacts, memory, scheduling, and the browser are not built yet.
 
 - Requirements: [docs/open-muse-implementation-requirements.md](docs/open-muse-implementation-requirements.md)
 - Technical design: [docs/tech-design.md](docs/tech-design.md)
@@ -47,6 +47,27 @@ The API binds to `127.0.0.1:8080` only. The worker has no internet route except 
 
 `OPA_MODE=demo` with `OPA_MODEL_PROVIDER=scripted` needs no keys and makes no network calls. For real use set `OPA_MODE=live`, `OPA_MODEL_PROVIDER=anthropic`, and `OPA_ANTHROPIC_API_KEY`. Missing configuration appears as a setup banner in the UI rather than a silent fallback.
 
+## Connect Google (live mode)
+
+The app only ever requests these scopes, and write scopes only when you allow changes:
+
+| Capability | Read only | Read and propose changes adds |
+|---|---|---|
+| Gmail | `https://www.googleapis.com/auth/gmail.readonly` | `https://www.googleapis.com/auth/gmail.send` |
+| Calendar | `https://www.googleapis.com/auth/calendar.readonly` | `https://www.googleapis.com/auth/calendar.events` |
+
+Plus `openid` and `email` to identify the account.
+
+1. In Google Cloud Console, create a project and enable the **Gmail API** and **Google Calendar API**.
+2. Configure the **OAuth consent screen**. For personal use choose *External*, keep the app in *Testing*, and add your own Google address as a test user. If you have a Google Workspace domain, *Internal* avoids the limits below.
+3. Create an **OAuth client ID** of type *Web application* with this exact authorized redirect URI: `http://127.0.0.1:8080/api/oauth/google/callback` (or your HTTPS origin plus `/api/oauth/google/callback`, also set as `OPA_GOOGLE_REDIRECT_URI`).
+4. Put the client ID in `OPA_GOOGLE_CLIENT_ID` for the api and broker, and the secret in `OPA_GOOGLE_CLIENT_SECRET` for the broker only. Set `OPA_MODE=live`.
+5. In the app, open Connections and choose **Connect with Google**.
+
+**Limits you should know about.** Gmail read and send are *restricted* scopes. While an External app is in Testing, Google expires its refresh tokens 7 days after sign-in; the app warns you on day 6 and shows **Reconnect**. Publishing an External app with restricted scopes requires Google's verification and a security assessment, which is outside this project. Calendar scopes are *sensitive*, not restricted.
+
+**Opt-in live check.** After connecting an account, `server/scripts/live_smoke_google.py` runs read-only calls against real Google (instructions in the file). It is never run by the test suite; writes need extra flags and a throwaway calendar.
+
 ## Tests
 
 ```sh
@@ -56,7 +77,7 @@ cd server && .venv/bin/python -m pytest          # unit + acceptance, embedded P
 
 ## Not yet documented
 
-Google API enablement and OAuth registration, backup, restore, and teardown arrive with milestones M3 and M6.
+Backup, restore, and teardown arrive with milestone M6.
 
 ## License
 

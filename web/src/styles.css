@@ -53,3 +53,4 @@ del { color: #b3261e; }
 label.block { display: block; margin: 6px 0; }
 ul.plain { list-style: none; padding: 0; display: grid; gap: 6px; }
 .card .badge { margin-left: 6px; }
+.notice { background: #fff4ce; padding: 8px; border-radius: 6px; }

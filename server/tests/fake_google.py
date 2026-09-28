@@ -15,7 +15,7 @@ from email import message_from_bytes, policy
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse
 
-import httpx
+from opa.broker.google.http import hx as httpx
 
 G = "https://www.googleapis.com/auth/"
 GMAIL_READ, GMAIL_SEND, CAL_READ, CAL_WRITE = G + "gmail.readonly", G + "gmail.send", G + "calendar.readonly", G + "calendar.events"

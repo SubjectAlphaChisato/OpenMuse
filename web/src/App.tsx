@@ -55,7 +55,17 @@ function Login({ onDone }: { onDone: () => void }) {
 
 function Shell({ me: initialMe, onLogout }: { me: Me; onLogout: () => void }) {
   const [me, setMe] = useState(initialMe);
-  const [screen, setScreen] = useState<Screen>("chat");
+  const [notice] = useState(() => {
+    // Returning from Google: /?oauth=connected|error&note=...&reason=...
+    const q = new URLSearchParams(window.location.search);
+    const oauth = q.get("oauth");
+    if (!oauth) return null;
+    window.history.replaceState(null, "", window.location.pathname);
+    return oauth === "connected"
+      ? { ok: true, text: `Google account connected.${q.get("note") ? " " + q.get("note") : ""}` }
+      : { ok: false, text: q.get("reason") ?? "Google sign-in failed." };
+  });
+  const [screen, setScreen] = useState<Screen>(notice ? "connections" : "chat");
   const [pending, setPending] = useState(0);
   const [tick, setTick] = useState(0);
   const [live, setLive] = useState("");
@@ -65,6 +75,7 @@ function Shell({ me: initialMe, onLogout }: { me: Me; onLogout: () => void }) {
     if (type === "task.waiting_user") setLive("A task needs your reply.");
     if (type === "task.blocked") setLive("A task is blocked.");
     if (type === "approval.requested") setLive("An action needs your approval.");
+    if (type === "connection.reauth_required") setLive("A connected account needs reconnecting.");
   }), []);
   useEffect(() => { api2.approvals().then((a) => setPending(a.length)).catch(() => undefined); }, [tick]);
   const labels: Record<Screen, string> = { chat: "Chat", tasks: "Tasks", approvals: "Approvals", notifications: "Notifications", connections: "Connections" };
@@ -93,7 +104,7 @@ function Shell({ me: initialMe, onLogout }: { me: Me; onLogout: () => void }) {
         {screen === "tasks" && <Tasks tick={tick} />}
         {screen === "approvals" && <Approvals tick={tick} announce={setLive} />}
         {screen === "notifications" && <Notifications tick={tick} />}
-        {screen === "connections" && <Connections me={me} tick={tick} onMe={setMe} announce={setLive} />}
+        {screen === "connections" && <Connections me={me} tick={tick} onMe={setMe} announce={setLive} notice={notice} />}
       </main>
     </div>
   );

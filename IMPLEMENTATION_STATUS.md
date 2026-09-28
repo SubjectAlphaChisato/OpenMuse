@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last updated: 2026-09-28 (M2) • Spec: `docs/open-muse-implementation-requirements.md` v0.1.1 • Design: `docs/tech-design.md`
+Last updated: 2026-09-28 (M3) • Spec: `docs/open-muse-implementation-requirements.md` v0.1.1 • Design: `docs/tech-design.md`
 
 ## Milestones
 
@@ -8,7 +8,7 @@ Last updated: 2026-09-28 (M2) • Spec: `docs/open-muse-implementation-requireme
 |---|---|
 | M1 Foundation | **Implemented and verified locally** (see evidence below) |
 | M2 Broker and approvals | **Implemented and verified locally** (fixture provider; see evidence below) |
-| M3 Google connectors | Not started |
+| M3 Google connectors | **Implemented; live verification pending credentials.** Verified against an in-process fake of Google's HTTP APIs, not against Google |
 | M4 Useful outputs | Not started |
 | M5 Automation | Not started |
 | M6 Browser and release | Not started |
@@ -24,9 +24,9 @@ Last updated: 2026-09-28 (M2) • Spec: `docs/open-muse-implementation-requireme
 | DEV-01 | Implemented | `generate()` adapter interface; deterministic scripted adapter; Anthropic adapter (adaptive thinking, effort, strict tools, `auto` tool choice, refusal handling, server-side fallbacks). Demo mode refuses the real provider; `/api/me` reports setup problems. |
 | UX-01 | Partial | Chat, Tasks, Approvals (exact payload, expiry, Allow once, Deny, unknown-outcome checks), Connections, and Notifications screens; durable notifications; SSE with replay by cursor and `Last-Event-ID`; semantic labels, focus styles, live-region announcements. Automations, Files, and the rest of Settings arrive with M4 and M5. |
 | APP-01 | Implemented | Read-only by default; per-capability off / read only / read and propose. Every write needs a fresh Allow once or Deny for one immutable action bound to owner, connection, task, tool version, and canonical payload hash; 24 h expiry; only the authenticated decision endpoint grants. “Always ask” also gates reads. The broker re-checks everything before dispatch. Attachment hash binding waits for artifacts (M4). |
-| CON-01 | Partial | Connect (demo account), permission changes with version checks, disconnect that invalidates approvals and denies new calls. Envelope-encrypted credential vault and separate broker DB role are in place. Google OAuth, refresh, revocation, and health checks are M3. |
-| GMAIL-01 | Partial (fixture) | All four operations with validation, exact recipients, sensitive-mail withholding (codes, resets, sign-in links), untrusted-content marking, Message-ID reconciliation. Real Gmail adapter is M3. |
-| CAL-01 | Partial (fixture) | All five operations; timed and all-day; IANA zones; end-after-start; past-event confirmation; DST-gap rejection; no attendees; recurring and attendee events cannot be edited; stale-edit detection by etag; create reconciles by persisted client ID. Real Calendar adapter is M3. |
+| CON-01 | Implemented, live verification pending | Google authorization-code flow with PKCE (S256) through Authlib; state is random, hashed at rest, single-use, bound to the signed-in session, and expires in 10 minutes; exact redirect URI; read scopes first and write scopes incrementally; granular consent clamps modes to what Google granted. The broker alone holds the client secret and tokens (envelope-encrypted), serializes refreshes with a row lock, retries once after a 401, and marks `reauth_required` with a notification on `invalid_grant`. Disconnect commits denial and invalidation first, then deletes credentials and attempts revocation, reporting failure without restoring access. Health check and Testing-mode 7-day warning. Pausing dependent automations waits for M5. |
+| GMAIL-01 | Implemented, live verification pending | Search (1-100 per page), message, thread (20 max), and send over the Gmail REST API. MIME walking prefers text/plain and converts HTML to text with links; 50 KB cap; sensitive-mail withholding; bodies marked untrusted. Send builds RFC 2822 with a local Message-ID, threads replies with In-Reply-To and References, and reconciles by `rfc822msgid:`. |
+| CAL-01 | Implemented, live verification pending | Calendar list, windowed events with `singleEvents=true` and paging, get, create with a persisted client event ID, update with `If-Match` on the reviewed etag. `sendUpdates=none` on every write. Times normalized to the event's IANA zone. |
 | ART-01, MEM-01 | Not started | M4 |
 | AUTO-01, AUTO-02 | Not started | M5 |
 | WEB-01, DATA-01 | Not started | M6 |
@@ -44,17 +44,26 @@ Last updated: 2026-09-28 (M2) • Spec: `docs/open-muse-implementation-requireme
 | A03 Duplicate execution | Pass | five concurrent dispatches of one action send once with one claim row; three concurrent decisions grant once; two workers cannot hold one task |
 | A04 Ambiguous send | Pass | lost response: `unknown`, task blocked, no automatic resend, reconcile finds it by Message-ID; lost request: not found, owner marks it, still no resend |
 | A05 Event recovery | Pass | lost response after insert: reconcile by persisted event ID, exactly one event; lost request: marked failed safely |
-| A06 Revocation | Partial | disconnect while awaiting approval invalidates it, blocks the task, and dispatch is denied. Token revocation and automation pausing arrive with M3 and M5. |
+| A06 Revocation | Pass except automations | disconnect invalidates approvals, blocks the waiting task, denies dispatch, deletes credentials, and revokes at Google; revocation failure is reported without restoring access. Pausing dependent automations waits for M5. |
 | A18 Budget/cancel | Pass | adds: cancel while awaiting approval invalidates the action and the broker refuses dispatch |
-| A07–A13, A16, A17, A20 | Not started | later milestones |
+| A07 OAuth refresh | Pass (fake Google) | expired token refreshes once for four concurrent calls; a 401 triggers one refresh and retry; a revoked grant yields `auth_required`, `reauth_required`, and a reconnect notification; no issued token appears in logs, API output, events, notifications, audit rows, checkpoints, or OAuth state |
+| A20 Demo/live separation | Pass (M3 scope) | live mode hides and refuses the demo account; missing Google config is an explicit setup state; demo mode refuses Google |
+| A08–A13, A16, A17 | Not started | later milestones |
 
-Totals on 2026-09-28: 67 pytest cases pass (embedded PostgreSQL 16, no network). Ruff clean.
+Totals on 2026-09-28: 95 pytest cases pass (embedded PostgreSQL 16, no network), four consecutive runs. Ruff clean.
 
 ## M2 boundary verification
 
 - **Database roles:** `opa db-roles` creates `opa_app` and `opa_broker`. Tests confirm the app role cannot read the `broker` schema, and the broker role cannot read password hashes, task intents or checkpoints, message content, sessions, or event payloads. A complete propose, approve, and send flow passes with the broker connected as `opa_broker`.
 - **Egress proxy policy:** the worker's proxy tunnels only allowlisted host:port pairs, refuses plain HTTP forwarding, and refuses allowlisted names that resolve to private addresses. Address classification covers loopback, RFC 1918, link-local and metadata, CGNAT, IPv6 unique-local, and IPv4-mapped IPv6.
 - **Mutation check:** removing the broker's payload-hash comparison makes the tamper test fail, so it is not passing vacuously. Removing the broker's "task must be running" check does not fail any test, because cancellation and lease fencing each block the same paths first; that check is defense in depth.
+
+## M3 verification
+
+- **Against a fake, not Google.** `tests/fake_google.py` implements Google's OAuth, Gmail, and Calendar HTTP behavior in-process: PKCE check, single-use codes, exact redirect URI, client authentication, bearer expiry on the test clock, per-endpoint scopes, etag preconditions, and injected faults. 28 M3 tests run the real API callback, broker, adapter, and worker against it.
+- **Live Google has not been called.** The live check was skipped as instructed. `server/scripts/live_smoke_google.py` is written and refuses to run without `LIVE_SMOKE=1`; it has never been run.
+- **Mutation checks:** removing the refresh row lock, the callback's session binding, or the "5xx on a write is unknown" rule each makes its test fail.
+- **One unexplained hang** occurred once during the mutation run and did not reproduce in seven later full runs. Every test now has a 60-second limit so a hang fails and names the test.
 
 ## Other verification performed
 
@@ -65,7 +74,8 @@ Totals on 2026-09-28: 67 pytest cases pass (embedded PostgreSQL 16, no network).
 
 - **Docker Compose has not been run.** Docker is not installed on the development machine. `deploy/compose.yaml` parses and its anchors resolve, but images have not been built.
 - Compose now declares the broker, egress proxy, database roles, and isolated networks, but it has not been run, so the network half of T-NET-01 (the worker cannot reach any host except through the proxy) is unverified. The proxy's policy half is tested.
-- Only the fixture provider exists. No Google API has been called.
+- No real Google API has been called. Differences between the fake and Google (error payload details, MIME edge cases, rate-limit behavior) are possible until the live check is run.
+- The Google connect flow is tested at the API level; the browser smoke covers the demo account only.
 - The Anthropic adapter has not been exercised against the live API (no key configured). It is code-complete but unverified.
 - Frontend API types are hand-written; generating them from OpenAPI is scheduled for M6.
 - SSE delivery polls the outbox every 500 ms rather than using `LISTEN/NOTIFY`. Correct but adds up to half a second of latency.
@@ -73,4 +83,4 @@ Totals on 2026-09-28: 67 pytest cases pass (embedded PostgreSQL 16, no network).
 
 ## External blockers
 
-None for M1 or M2. M3 needs a Google Cloud OAuth client for live verification; fixture tests do not.
+Live verification of M3 needs a Google Cloud project, an OAuth client, and a test Google account (README, Connect Google). No other external blockers.

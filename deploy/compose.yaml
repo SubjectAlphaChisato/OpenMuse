@@ -50,6 +50,8 @@ services:
       <<: [*app-db, *internal]
       OPA_BIND_HOST: 0.0.0.0
       OPA_WEB_DIST_DIR: /web
+      OPA_GOOGLE_CLIENT_ID: ${OPA_GOOGLE_CLIENT_ID:-}        # the api builds the consent URL; it never sees the secret
+      OPA_GOOGLE_REDIRECT_URI: ${OPA_GOOGLE_REDIRECT_URI:-http://127.0.0.1:8080/api/oauth/google/callback}
     ports: ["127.0.0.1:8080:8080"]   # localhost only (AUTH-01); see README for HTTPS
     volumes: [webdist:/web:ro]
     depends_on:
@@ -76,6 +78,9 @@ services:
       OPA_BIND_HOST: 0.0.0.0
       OPA_DATABASE_URL: postgresql+asyncpg://opa_broker:${OPA_BROKER_DB_PASSWORD}@postgres:5432/opa
       OPA_BROKER_KEK: "${OPA_BROKER_KEK:?generate one with opa generate-kek}"
+      OPA_GOOGLE_CLIENT_ID: ${OPA_GOOGLE_CLIENT_ID:-}
+      OPA_GOOGLE_CLIENT_SECRET: ${OPA_GOOGLE_CLIENT_SECRET:-}   # broker only
+      OPA_GOOGLE_OAUTH_TESTING: ${OPA_GOOGLE_OAUTH_TESTING:-true}
     depends_on: { migrate: { condition: service_completed_successfully } }
     networks: [internal, provider-egress]
 

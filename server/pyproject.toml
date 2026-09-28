@@ -28,6 +28,7 @@ dependencies = [
 dev = [
   "pytest>=8.3",
   "pytest-asyncio>=0.24",
+  "pytest-timeout>=2.3",
   "pgserver>=0.1.4",
   "ruff>=0.6",
   "playwright>=1.48",
@@ -46,6 +47,7 @@ packages = ["opa"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+timeout = 60
 
 [tool.ruff]
 line-length = 100

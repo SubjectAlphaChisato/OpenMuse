@@ -74,7 +74,7 @@ export function subscribe(onEvent: (type: string) => void): () => void {
   const es = new EventSource("/api/events", { withCredentials: true });
   const handler = (e: MessageEvent) => onEvent((e as MessageEvent & { type: string }).type);
   const types = ["task.queued", "task.running", "task.waiting_user", "task.waiting_approval", "task.blocked", "approval.requested", "approval.decided",
-    "action.succeeded", "action.failed", "action.unknown", "action.cancelled", "connection.updated", "connection.disconnected", "connection.connected",
+    "action.succeeded", "action.failed", "action.unknown", "action.cancelled", "connection.updated", "connection.disconnected", "connection.connected", "connection.reauth_required",
     "task.succeeded", "task.failed", "task.cancelled", "message.created", "conversation.deleted"];
   types.forEach((t) => es.addEventListener(t, handler));
   return () => es.close();
@@ -94,7 +94,10 @@ export interface Action {
   error: { code: string; message: string } | null; resolution: string | null; dispatch_started_at: string | null;
 }
 export interface Connector { provider: string; label: string; capabilities: string[]; available: boolean; reason: string | null }
-export interface Connection { id: string; provider: string; account_label: string; status: string; modes: Record<string, Mode>; version: number; is_demo: boolean }
+export interface Connection {
+  id: string; provider: string; account_label: string; status: string; modes: Record<string, Mode>; version: number; is_demo: boolean;
+  granted_scopes: string[]; last_error: string | null; last_health_at: string | null; warning: string | null;
+}
 
 export const api2 = {
   approvals: () => req<Approval[]>("GET", "/api/approvals"),
@@ -109,4 +112,7 @@ export const api2 = {
   setModes: (c: Connection, modes: Record<string, Mode>) => req<Connection>("PATCH", `/api/connections/${c.id}`, { modes, expected_version: c.version }),
   disconnect: (c: Connection) => req<Connection>("DELETE", `/api/connections/${c.id}`),
   setApprovalMode: (mode: "ask_writes" | "always_ask") => req<Me>("PATCH", "/api/me", { approval_mode: mode }),
+  googleAuthorize: (modes: Record<string, Mode>, connectionId?: string) =>
+    req<{ authorization_url: string; scopes: string[] }>("POST", "/api/connectors/google/authorize", { modes, connection_id: connectionId ?? null }),
+  health: (c: Connection) => req<{ status: string; detail: string | null }>("POST", `/api/connections/${c.id}/health`),
 };

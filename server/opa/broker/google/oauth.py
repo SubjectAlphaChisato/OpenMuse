@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import httpx
+from opa.broker.google.http import hx as httpx
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 
 from opa.core.settings import Settings

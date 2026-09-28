@@ -103,7 +103,7 @@ async def callback(request: Request, db: DbDep, owner: OwnerDep, sess: SessionDe
     conn = await db.get(Connection, res["connection_id"])
     if conn is None:
         conn = Connection(id=res["connection_id"], owner_id=owner.id, provider="google", account_label=res["email"],
-                          provider_account_id=res["account_id"], modes={"gmail": "off", "calendar": "off"})
+                          provider_account_id=res["account_id"], modes={"gmail": "off", "calendar": "off"}, version=0)
         db.add(conn)
     wanted = {**conn.modes, **{k: v for k, v in row.requested_modes.items() if v != "off" or conn.modes.get(k) is None}}
     conn.modes = {cap: gscopes.allowed_mode(cap, mode, granted) for cap, mode in wanted.items()}
