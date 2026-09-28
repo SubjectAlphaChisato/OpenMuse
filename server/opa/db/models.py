@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    Computed,
     DateTime,
     ForeignKey,
     Index,
@@ -16,7 +17,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from opa.core.ids import new_id
@@ -327,3 +328,61 @@ class FixtureState(Base):
     state: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     faults: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
     updated_at: Mapped[datetime] = ts_col(onupdate=func.now())
+
+
+# ---------------------------------------------------------------- M4: memory (MEM-01) and artifacts (ART-01)
+
+MEMORY_KINDS = ("user_statement", "inference")
+ALWAYS_INJECTED_TAGS = ("style", "identity")
+
+
+class Memory(Base):
+    """One remembered item. `scope` is 'global' or a conversation ID. Forgetting deletes the row,
+    which also removes its full-text index entry (MEM-01)."""
+
+    __tablename__ = "memories"
+    id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    scope: Mapped[str] = mapped_column(String(26), nullable=False, default="global")
+    source_ref: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    tags: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    tsv: Mapped[Any] = mapped_column(TSVECTOR, Computed("to_tsvector('english', text)", persisted=True))
+    created_at: Mapped[datetime] = ts_col()
+    updated_at: Mapped[datetime] = ts_col()
+
+
+Index("ix_memories_tsv", Memory.tsv, postgresql_using="gin")
+
+
+class Artifact(Base):
+    """Stable file identity. Bytes live in immutable, content-addressed versions (ART-01)."""
+
+    __tablename__ = "artifacts"
+    id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    task_id: Mapped[str | None] = mapped_column(String(26), index=True)
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    mime: Mapped[str] = mapped_column(String(64), nullable=False)
+    origin: Mapped[str] = mapped_column(String(16), nullable=False)  # upload | generated | owner
+    current_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = ts_col()
+    updated_at: Mapped[datetime] = ts_col()
+
+
+class ArtifactVersion(Base):
+    __tablename__ = "artifact_versions"
+    artifact_id: Mapped[str] = mapped_column(ForeignKey("artifacts.id", ondelete="CASCADE"), primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    storage_key: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_refs: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
+    created_by_task_id: Mapped[str | None] = mapped_column(String(26))
+    note: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)  # e.g. CSV escaping, extraction status
+    extracted_text: Mapped[str | None] = mapped_column(Text)  # PDFs only; text types are read from their bytes
+    created_at: Mapped[datetime] = ts_col()

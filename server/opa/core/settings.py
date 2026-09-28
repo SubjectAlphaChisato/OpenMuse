@@ -39,6 +39,11 @@ class Settings(BaseSettings):
 
     memory_context_chars: int = 8000
 
+    # M4: artifacts (ART-01)
+    upload_max_bytes: int = 20 * 1024 * 1024
+    extraction_timeout_seconds: float = 30.0
+    extraction_max_chars: int = 2_000_000
+
     # M2: broker, approvals, egress
     internal_token: str = ""  # shared bearer for internal RPC; required by `opa broker`
     broker_url: str = "http://127.0.0.1:8081"
