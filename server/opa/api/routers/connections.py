@@ -12,6 +12,7 @@ from opa.api.actions_service import invalidate_actions, open_actions_for_connect
 from opa.api.deps import ClockDep, DbDep, OwnerDep, SettingsDep, get_owned
 from opa.api.routers.oauth import google_ready
 from opa.broker.google import scopes as gscopes
+from opa.scheduler.automations import pause_for_connection
 from opa.sdk.contract import ConnectorError
 from opa.core.errors import Conflict, Invalid
 from opa.db.models import Connection
@@ -136,6 +137,7 @@ async def disconnect(connection_id: str, request: Request, owner: OwnerDep, cloc
         conn.status = "disconnected"
         conn.version += 1
         await invalidate_actions(db, await open_actions_for_connection(db, conn.id), "the account was disconnected", clock, block_code="connection_disconnected")
+        await pause_for_connection(db, owner.id, conn.id, "connection_disconnected")
     revoked, err = conn.provider == "fixture", None
     broker = request.app.state.broker
     if conn.provider != "fixture":

@@ -2,7 +2,7 @@
 
 A self-hostable personal agent: persistent chat, durable background tasks, and (in later milestones) Gmail and Google Calendar connectors with enforced human approval for every external write.
 
-**Status: milestones M1 to M3 of six.** See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md). Gmail and Google Calendar are implemented, with live verification against Google still pending; a built-in demo account works without any credentials. Artifacts, memory, scheduling, and the browser are not built yet.
+**Status: milestones M1 to M5 of six.** See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md). Chat, background tasks, approvals, Gmail and Google Calendar (live verification pending), files, memory, schedules, and calendar-change triggers work; a built-in demo account works without any credentials. The restricted browser, export and delete-all, backup and restore, and release packaging are M6.
 
 - Requirements: [docs/open-muse-implementation-requirements.md](docs/open-muse-implementation-requirements.md)
 - Technical design: [docs/tech-design.md](docs/tech-design.md)
@@ -24,6 +24,7 @@ export OPA_INTERNAL_TOKEN=$(openssl rand -hex 32)  # shared by api, worker, and 
 OPA_WEB_DIST_DIR=../web/dist .venv/bin/opa api    # http://127.0.0.1:8080
 .venv/bin/opa broker                               # second terminal, port 8081
 .venv/bin/opa worker                               # third terminal
+.venv/bin/opa scheduler                            # fourth terminal: schedules and calendar-change triggers
 ```
 
 In the app, open Connections and connect the demo account to try approvals without any external service. Accounts start read only; switch Gmail or Calendar to “Read and propose changes” to let the assistant propose writes, which always wait for your approval.

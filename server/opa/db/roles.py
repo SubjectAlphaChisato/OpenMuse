@@ -13,7 +13,7 @@ from psycopg import sql
 
 BROKER_COLUMN_READS = {
     "owners": ["id", "preferences"],
-    "tasks": ["id", "owner_id", "state"],
+    "tasks": ["id", "owner_id", "state", "allowed_connection_ids"],
     "jobs": ["id", "task_id", "lease_token", "lease_expires_at"],
     # M4: attachment binding checks file identity and digests, never file names of other owners or text
     "artifacts": ["id", "owner_id", "name", "mime", "current_version", "deleted_at"],

@@ -68,6 +68,7 @@ class FakeGoogle:
         self._add_event("primary", "gteam1", "Team sync", f"{tomorrow}T15:00:00-07:00", f"{tomorrow}T15:30:00-07:00", attendees=[{"email": "sam@team.example"}])
         ev = {"id": "gholiday", "etag": '"e-hol"', "status": "confirmed", "summary": "Holiday", "start": {"date": tomorrow}, "end": {"date": tomorrow}, "updated": now.isoformat()}
         self.events["primary"]["gholiday"] = ev
+        self._bump("primary", "gholiday")
 
     def _add_msg(self, mid_, thread, frm, to, subject, text, when: datetime, labels, *, html: str | None = None, mid: str | None = None) -> None:
         headers = [{"name": "From", "value": frm}, {"name": "To", "value": to}, {"name": "Subject", "value": subject},
@@ -81,10 +82,32 @@ class FakeGoogle:
             snippet = text[:100].replace("'", "&#39;")
         self.messages[mid_] = {"id": mid_, "threadId": thread, "labelIds": labels, "snippet": snippet, "payload": payload, "internalDate": when.timestamp()}
 
+    def _bump(self, cal: str, eid: str) -> None:
+        self.seq = getattr(self, "seq", 0) + 1
+        self.event_seq = getattr(self, "event_seq", {})
+        self.event_seq[(cal, eid)] = self.seq
+
+    def move_event(self, cal: str, eid: str, start: str, end: str) -> None:
+        ev = self.events[cal][eid]
+        ev["start"] = {"dateTime": start, "timeZone": "America/Los_Angeles"}
+        ev["end"] = {"dateTime": end, "timeZone": "America/Los_Angeles"}
+        ev["etag"] = f'"e-{secrets.token_hex(3)}"'
+        self._bump(cal, eid)
+
+    def cancel_event(self, cal: str, eid: str) -> None:
+        ev = self.events[cal][eid]
+        ev["status"], ev["etag"] = "cancelled", f'"e-{secrets.token_hex(3)}"'
+        self._bump(cal, eid)
+
+    def invalidate_sync_tokens(self) -> None:
+        """Google may expire sync tokens at any time; older tokens then get 410."""
+        self.sync_epoch = getattr(self, "sync_epoch", 0) + 1
+
     def _add_event(self, cal: str, eid: str, summary: str, start: str, end: str, **extra: Any) -> None:
         self.events[cal][eid] = {"id": eid, "etag": f'"e-{secrets.token_hex(3)}"', "status": "confirmed", "summary": summary,
                                  "start": {"dateTime": start, "timeZone": "America/Los_Angeles"}, "end": {"dateTime": end, "timeZone": "America/Los_Angeles"},
                                  "updated": self.clock.now().isoformat(), **extra}
+        self._bump(cal, eid)
 
     # ------------------------------------------------------------------ test controls
     def consent(self, authorization_url: str, *, sub: str = "sub-1", grant: list[str] | None = None, deny: bool = False) -> str:
@@ -273,14 +296,33 @@ class FakeGoogle:
             return _err(404, "Not Found")
         store = self.events[cal]
         if len(parts) == 4 and request.method == "GET":
-            lo = datetime.fromisoformat(params["timeMin"])
-            hi = datetime.fromisoformat(params["timeMax"])
             assert params.get("singleEvents") == "true"
             def start_of(e):
                 s = e["start"]
                 return datetime.fromisoformat(s["dateTime"]) if "dateTime" in s else datetime.fromisoformat(s["date"] + "T00:00:00-07:00")
-            items = sorted([e for e in store.values() if lo <= start_of(e) < hi], key=start_of)
-            return httpx.Response(200, json={"timeZone": "America/Los_Angeles", "items": items})
+            if "syncToken" in params:  # incremental sync: no time bounds allowed, deleted entries included
+                assert "timeMin" not in params and "timeMax" not in params and params.get("showDeleted") == "true"
+                _, epoch, since_s = params["syncToken"].split(":")
+                since = int(since_s)
+                if int(epoch) != getattr(self, "sync_epoch", 0):
+                    return _err(410, "Sync token is no longer valid, a full sync is required.", "fullSyncRequired")
+                changed = [e for (c, i), n in sorted(self.event_seq.items(), key=lambda kv: kv[1]) if c == cal and n > since for e in [store[i]]]
+                items = [{"id": e["id"], "etag": e["etag"], "status": "cancelled"} if e["status"] == "cancelled" else e for e in changed]
+            else:
+                lo = datetime.fromisoformat(params["timeMin"])
+                hi = datetime.fromisoformat(params["timeMax"]) if "timeMax" in params else None
+                items = sorted([e for e in store.values() if e["status"] != "cancelled" and lo <= start_of(e) and (hi is None or start_of(e) < hi)], key=start_of)
+                if hi is not None:
+                    return httpx.Response(200, json={"timeZone": "America/Los_Angeles", "items": items})
+            # sync requests are paged two at a time so clients must follow nextPageToken
+            start = int(params.get("pageToken", 0))
+            page = items[start:start + 2]
+            body: dict[str, Any] = {"timeZone": "America/Los_Angeles", "items": page}
+            if start + 2 < len(items):
+                body["nextPageToken"] = str(start + 2)
+            else:
+                body["nextSyncToken"] = f"gs:{getattr(self, 'sync_epoch', 0)}:{self.seq}"
+            return httpx.Response(200, json=body)
         if len(parts) == 4 and request.method == "POST":
             assert params.get("sendUpdates") == "none", "writes must not send invitations"
             body = json.loads(request.content)
@@ -289,6 +331,7 @@ class FakeGoogle:
                 return _err(409, "The requested identifier already exists.", "duplicate")
             ev = {**body, "etag": f'"e-{secrets.token_hex(3)}"', "status": "confirmed", "updated": self.clock.now().isoformat()}
             store[body["id"]] = ev
+            self._bump(cal, body["id"])
             if kind == "timeout_after":
                 raise httpx.ReadTimeout("timed out", request=request)
             return httpx.Response(200, json=ev)
@@ -304,5 +347,6 @@ class FakeGoogle:
                 return _err(412, "Precondition Failed", "conditionNotMet")
             ev.update(json.loads(request.content))
             ev["etag"] = f'"e-{secrets.token_hex(3)}"'
+            self._bump(cal, eid)
             return httpx.Response(200, json=ev)
         return _err(405, "method not allowed")

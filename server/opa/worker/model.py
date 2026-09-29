@@ -75,7 +75,9 @@ class ScriptedAdapter:
         idx = sum(1 for m in messages if m.get("role") == "assistant")
         idx = min(idx, len(steps) - 1)
         step = steps[idx] if steps else {"text": "OK."}
-        calls = [ToolCall(id=f"call_{idx}_{n}", name=c["name"], input=self._resolve_auto(c.get("input", {}), c["name"], tools)) for n, c in enumerate(step.get("tool_calls", []))]
+        last = self._last_result(messages)
+        calls = [ToolCall(id=f"call_{idx}_{n}", name=c["name"], input=self._resolve_last(self._resolve_auto(c.get("input", {}), c["name"], tools), last))
+                 for n, c in enumerate(step.get("tool_calls", []))]
         stop = step.get("stop_reason") or ("tool_use" if calls else "end_turn")
         return GenerateResult(
             text=step.get("text", ""),
@@ -96,6 +98,30 @@ class ScriptedAdapter:
                 enum = tool["input_schema"].get("properties", {}).get(k, {}).get("enum") or [""]
                 out[k] = enum[0]
         return out
+
+
+    @staticmethod
+    def _last_result(messages: list[dict[str, Any]]) -> dict[str, Any]:
+        for m in reversed(messages):
+            if m.get("role") == "user" and isinstance(m.get("content"), list):
+                for b in m["content"]:
+                    if b.get("type") == "tool_result":
+                        try:
+                            return (json.loads(str(b.get("content")).split("\n", 1)[0]) or {}).get("data") or {}
+                        except ValueError:
+                            return {}
+        return {}
+
+    @classmethod
+    def _resolve_last(cls, value: Any, last: dict[str, Any]) -> Any:
+        """Scripts may write "@last.<key>" to reuse a value from the most recent tool result (e.g. a new artifact ID)."""
+        if isinstance(value, str) and value.startswith("@last."):
+            return last.get(value[len("@last."):])
+        if isinstance(value, dict):
+            return {k: cls._resolve_last(v, last) for k, v in value.items()}
+        if isinstance(value, list):
+            return [cls._resolve_last(v, last) for v in value]
+        return value
 
 
 class AnthropicAdapter:

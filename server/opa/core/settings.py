@@ -66,6 +66,14 @@ class Settings(BaseSettings):
     calendar_api_base: str = "https://www.googleapis.com/calendar/v3"
     oauth_state_ttl_minutes: int = 10
 
+    # M5: scheduler (AUTO-01, AUTO-02)
+    scheduler_tick_seconds: int = 15
+    schedule_grace_seconds: int = 120  # a run this much after its due time is marked late
+    trigger_poll_seconds: int = 300
+    trigger_debounce_seconds: int = 60
+    trigger_window_hours: int = 48
+    gc_interval_minutes: int = 60
+
     @property
     def sync_database_url(self) -> str:
         return self.database_url.replace("+asyncpg", "+psycopg")

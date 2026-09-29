@@ -52,5 +52,9 @@ class BrokerClient:
     async def health(self, connection_id: str, owner_id: str) -> dict[str, Any]:
         return await self._post("/internal/connections/health", {"connection_id": connection_id, "owner_id": owner_id})
 
+    async def calendar_sync(self, owner_id: str, connection_id: str, calendar_id: str, sync_token: str | None, time_min: str) -> dict[str, Any]:
+        return await self._post("/internal/calendar/sync", {"owner_id": owner_id, "connection_id": connection_id, "calendar_id": calendar_id,
+                                                            "sync_token": sync_token, "time_min": time_min})
+
     async def aclose(self) -> None:
         await self._client.aclose()

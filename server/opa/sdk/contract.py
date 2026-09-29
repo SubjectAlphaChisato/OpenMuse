@@ -80,5 +80,9 @@ class ConnectorError(Exception):
         self.retry_after_seconds = retry_after_seconds
 
 
+class SyncTokenExpired(Exception):
+    """The provider no longer accepts the incremental sync token; a full resync is required (Google 410)."""
+
+
 class OutcomeUnknown(Exception):
     """Raised by an adapter when a write may or may not have reached the provider."""

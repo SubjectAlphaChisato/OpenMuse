@@ -146,6 +146,7 @@ def _drive(base: str, shots: str | None) -> int:
 
         try:
             _m2(page, snap)
+            _m5(page, snap)
         except Exception:
             snap(page, "FAILED")
             print("FAIL screenshot saved to", shots)
@@ -200,6 +201,33 @@ def _m2(page, snap) -> None:
         expect(page.get_by_text("Task: Done").last).to_be_visible()
         print("PASS worker dispatched through the broker after approval; task completed")
         snap(page, "7-chat-after-send")
+
+
+
+def _m5(page, snap) -> None:
+    # ---- M5: create a weekday schedule through preview and confirmation, turn it off, delete it
+    page.on("dialog", lambda d: d.accept())
+    page.get_by_role("button", name="Automations").click()
+    page.get_by_role("button", name="New automation").click()
+    page.get_by_label("Name").fill("Evening review")
+    page.get_by_label("What should happen each time?").fill("Summarize what happened today")
+    page.get_by_label("Time (24-hour)").fill("18:00")
+    page.get_by_role("button", name="Preview schedule").click()
+    preview = page.get_by_role("status").filter(has_text="Every weekday at 18:00")
+    expect(preview).to_be_visible()
+    expect(preview.get_by_role("listitem")).to_have_count(3)
+    snap(page, "8-automation-preview")
+    page.get_by_role("button", name="Confirm and activate").click()
+    card = page.get_by_role("article", name="Evening review")
+    expect(card.get_by_text("Active")).to_be_visible()
+    expect(card.get_by_text("Every weekday at 18:00")).to_be_visible()
+    print("PASS automation previewed with next runs, then confirmed and active")
+    snap(page, "9-automations")
+    card.get_by_role("button", name="Turn off").click()
+    expect(card.get_by_text("Off", exact=True)).to_be_visible()
+    card.get_by_role("button", name="Delete").click()
+    expect(page.get_by_text("No automations yet.")).to_be_visible()
+    print("PASS automation turned off and deleted")
 
 
 if __name__ == "__main__":

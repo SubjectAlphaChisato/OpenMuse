@@ -94,6 +94,22 @@ def broker() -> None:
     uvicorn.run(create_broker_app(b, sweep_interval=30), host=s.bind_host, port=s.broker_bind_port)
 
 
+@app.command()
+def scheduler() -> None:
+    """Run the scheduler: schedules, calendar-change triggers, held runs, and file clean-up (AUTO-01, AUTO-02)."""
+    from opa.broker.client import BrokerClient
+    from opa.core.clock import SystemClock
+    from opa.db.engine import get_sessionmaker
+    from opa.scheduler.service import Scheduler
+
+    logging.basicConfig(level=logging.INFO)
+    s = get_settings()
+    broker = BrokerClient(s.broker_url, s.internal_token) if s.internal_token else None
+    if broker is None:
+        logging.warning("OPA_INTERNAL_TOKEN is not set; calendar-change triggers cannot poll")
+    asyncio.run(Scheduler(s, get_sessionmaker(), SystemClock(), broker).run_forever())
+
+
 @app.command("db-roles")
 def db_roles() -> None:
     """Create or update the opa_app and opa_broker roles and their grants. Run after every migration."""

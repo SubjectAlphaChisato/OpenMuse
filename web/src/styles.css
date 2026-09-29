@@ -69,3 +69,7 @@ tr.selected { background: #eef3ff; }
 pre.preview { white-space: pre-wrap; }
 .files-created { font-size: 13px; }
 .mem-list li p { margin: 0 0 6px; }
+label.inline { margin-right: 10px; }
+fieldset { border: 1px solid #ddd; border-radius: 6px; margin: 8px 0; }
+textarea { width: 100%; }
+.link { white-space: nowrap; }

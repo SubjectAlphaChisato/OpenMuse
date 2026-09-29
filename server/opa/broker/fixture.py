@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from opa.broker.ops import parse_time
 from opa.core.clock import Clock
 from opa.db.models import FixtureState
-from opa.sdk.contract import ConnectorError, OutcomeUnknown
+from opa.sdk.contract import ConnectorError, OutcomeUnknown, SyncTokenExpired
 
 LA = ZoneInfo("America/Los_Angeles")
 
@@ -48,7 +48,7 @@ def seed_state(account: str, now: datetime) -> dict[str, Any]:
                 "start": {"date_time": start.replace(tzinfo=None).isoformat(), "date": None, "time_zone": "America/Los_Angeles"},
                 "end": {"date_time": (start + timedelta(minutes=minutes)).replace(tzinfo=None).isoformat(), "date": None, "time_zone": "America/Los_Angeles"},
                 "updated": now.isoformat(), **extra}
-    return {
+    state = {
         "account": account,
         "messages": msgs,
         "next_message": 100,
@@ -64,6 +64,24 @@ def seed_state(account: str, now: datetime) -> dict[str, Any]:
             "work": [],
         },
     }
+    for i, e in enumerate(state["events"]["primary"], start=1):
+        e["seq"] = i
+    state["event_seq"] = len(state["events"]["primary"])
+    return state
+
+
+def _bump(state: dict[str, Any], event: dict[str, Any]) -> None:
+    state["event_seq"] = state.get("event_seq", 0) + 1
+    event["seq"] = state["event_seq"]
+
+
+def touch_event(state: dict[str, Any], calendar_id: str, event_id: str, **changes: Any) -> dict[str, Any]:
+    """Apply an edit made outside the assistant (tests and demos): new etag, next change sequence."""
+    e = next(e for e in state["events"][calendar_id] if e["id"] == event_id)
+    e.update(changes)
+    e["etag"] = f'"{secrets.token_hex(4)}"'
+    _bump(state, e)
+    return e
 
 
 def _matches(m: dict[str, Any], query: str) -> bool:
@@ -181,6 +199,24 @@ class FixtureBackend:
     async def get_event(self, calendar_id: str, event_id: str) -> dict[str, Any] | None:
         return self._event(await self._snapshot(), calendar_id, event_id)
 
+    async def sync_events(self, calendar_id: str, sync_token: str | None, time_min: str) -> dict[str, Any]:
+        """Incremental sync with provider-style tokens: a full list without a token, changes since it with one."""
+        if await self._take_fault("calendar.sync") == "token_expired":
+            raise SyncTokenExpired()
+        s = await self._snapshot()
+        evs = s["events"].get(calendar_id)
+        if evs is None:
+            raise ConnectorError("not_found", "calendar not found")
+        if sync_token is None:
+            items = [copy.deepcopy(e) for e in evs if e.get("status") != "cancelled"]
+        else:
+            try:
+                since = int(sync_token.removeprefix("fx:"))
+            except ValueError:
+                raise SyncTokenExpired() from None
+            items = [copy.deepcopy(e) for e in evs if e.get("seq", 0) > since]
+        return {"events": items, "next_sync_token": f"fx:{s.get('event_seq', 0)}"}
+
     async def find_sent(self, message_id_header: str) -> dict[str, Any] | None:
         s = await self._snapshot()
         return next((m for m in s["messages"] if m["message_id_header"] == message_id_header and "SENT" in m["labels"]), None)
@@ -226,6 +262,7 @@ class FixtureBackend:
             e = {"id": key, "etag": f'"{secrets.token_hex(4)}"', "summary": c["summary"], "description": c.get("description"),
                  "location": c.get("location"), "status": "confirmed", "start": c["start"], "end": c["end"], "updated": now}
             evs.append(e)
+            _bump(s, e)
             return {"data": {"event_id": key, "etag": e["etag"]}, "provider_refs": [f"calendar:{c['calendar_id']}/{key}"]}
         if tool == "calendar.update_event":
             evs = s["events"].get(c["calendar_id"], [])
@@ -237,6 +274,7 @@ class FixtureBackend:
             e.update(c["changes"])
             e["etag"] = f'"{secrets.token_hex(4)}"'
             e["updated"] = now
+            _bump(s, e)
             return {"data": {"event_id": e["id"], "etag": e["etag"]}, "provider_refs": [f"calendar:{c['calendar_id']}/{e['id']}"]}
         raise ConnectorError("invalid_input", f"unsupported write {tool}")
 

@@ -50,6 +50,14 @@ class OwnedConnection(BaseModel):
     owner_id: str
 
 
+class CalendarSyncIn(BaseModel):
+    owner_id: str  # supplied by the scheduler from the automation row, never by the model
+    connection_id: str
+    calendar_id: str
+    sync_token: str | None = None
+    time_min: str
+
+
 class ReconcileIn(BaseModel):
     action_id: str
     owner_id: str  # supplied by the authenticated API, never by the model
@@ -110,6 +118,10 @@ def create_broker_app(broker: Broker, *, sweep_interval: float | None = None) ->
     @app.post("/internal/connections/health", dependencies=guarded)
     async def health_check(body: OwnedConnection) -> dict[str, Any]:
         return await broker.health(body.connection_id, body.owner_id)
+
+    @app.post("/internal/calendar/sync", dependencies=guarded)
+    async def calendar_sync(body: CalendarSyncIn) -> dict[str, Any]:
+        return await broker.calendar_sync(body.owner_id, body.connection_id, body.calendar_id, body.sync_token, body.time_min)
 
     if sweep_interval:
         @app.on_event("startup")

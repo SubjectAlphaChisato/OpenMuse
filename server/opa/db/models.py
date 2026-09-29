@@ -137,8 +137,15 @@ class Task(Base):
     current_step: Mapped[str | None] = mapped_column(Text)
     last_activity_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # M5: why the task exists ({"type": "schedule" | "calendar_change", "automation_id": ...}); null for chat tasks
+    origin: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # M5: connections this task may use; null means any of the owner's connections (chat tasks)
+    allowed_connection_ids: Mapped[list[str] | None] = mapped_column(ARRAY(String))
     created_at: Mapped[datetime] = ts_col()
     updated_at: Mapped[datetime] = ts_col(onupdate=func.now())
+
+
+Index("ix_tasks_origin_automation", Task.origin["automation_id"].astext, postgresql_where=Task.origin.is_not(None))
 
 
 class Job(Base):
@@ -386,3 +393,71 @@ class ArtifactVersion(Base):
     note: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)  # e.g. CSV escaping, extraction status
     extracted_text: Mapped[str | None] = mapped_column(Text)  # PDFs only; text types are read from their bytes
     created_at: Mapped[datetime] = ts_col()
+
+
+# ---------------------------------------------------------------- M5: automations (AUTO-01, AUTO-02)
+
+AUTOMATION_KINDS = ("once", "daily", "weekly", "calendar_change")
+OCCURRENCE_STATES = ("started", "pending", "coalesced", "missed_paused", "cancelled")
+
+
+class Automation(Base):
+    """A schedule or calendar-change trigger. Schedules are wall-clock times in their own IANA zone."""
+
+    __tablename__ = "automations"
+    id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    conversation_id: Mapped[str | None] = mapped_column(ForeignKey("conversations.id", ondelete="SET NULL"))
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    time_zone: Mapped[str] = mapped_column(String(64), nullable=False)
+    local_time: Mapped[str | None] = mapped_column(String(5))  # "HH:MM"
+    weekdays: Mapped[list[int] | None] = mapped_column(ARRAY(Integer))  # 0 = Monday
+    run_date: Mapped[str | None] = mapped_column(String(10))  # "YYYY-MM-DD" for once
+    trigger: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # calendar_change config
+    connection_ids: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, default=list)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by: Mapped[str] = mapped_column(String(16), nullable=False, default="owner")  # owner | assistant
+    source_task_id: Mapped[str | None] = mapped_column(String(26))
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    paused_reason: Mapped[str | None] = mapped_column(String(64))
+    held_notice_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    trigger_state: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = ts_col()
+    updated_at: Mapped[datetime] = ts_col(onupdate=func.now())
+
+
+class Occurrence(Base):
+    """One due time (or one debounced trigger firing). The composite key makes enqueueing idempotent."""
+
+    __tablename__ = "occurrences"
+    automation_id: Mapped[str] = mapped_column(ForeignKey("automations.id", ondelete="CASCADE"), primary_key=True)
+    scheduled_for: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    task_id: Mapped[str | None] = mapped_column(String(26))
+    late: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    missed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    detail: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = ts_col()
+
+
+class ProviderEvent(Base):
+    """Deduplication record for provider change notifications (AUTO-02)."""
+
+    __tablename__ = "provider_events"
+    __table_args__ = (UniqueConstraint("connection_id", "resource_id", "version_key", name="uq_provider_events_version"),)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False)
+    connection_id: Mapped[str] = mapped_column(String(26), nullable=False)
+    resource_id: Mapped[str] = mapped_column(String(512), nullable=False)
+    version_key: Mapped[str] = mapped_column(String(256), nullable=False)
+    automation_id: Mapped[str | None] = mapped_column(String(26))
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

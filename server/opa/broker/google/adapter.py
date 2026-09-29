@@ -21,7 +21,7 @@ from opa.broker.vault import Vault
 from opa.core.clock import Clock
 from opa.core.settings import Settings
 from opa.db.models import BrokerCredential
-from opa.sdk.contract import ConnectorError, OutcomeUnknown
+from opa.sdk.contract import ConnectorError, OutcomeUnknown, SyncTokenExpired
 
 REFRESH_MARGIN = timedelta(seconds=60)
 METADATA_HEADERS = ["From", "To", "Cc", "Subject", "Date"]
@@ -80,7 +80,8 @@ class GoogleBackend:
         raise AssertionError("unreachable")
 
     # ------------------------------------------------------------ HTTP with error mapping
-    async def _call(self, method: str, url: str, *, write: bool = False, params: Any = None, json: Any = None, headers: dict[str, str] | None = None) -> Any:
+    async def _call(self, method: str, url: str, *, write: bool = False, params: Any = None, json: Any = None, headers: dict[str, str] | None = None,
+                    sync: bool = False) -> Any:
         token = await self.access_token()
         async with httpx.AsyncClient(transport=self.transport, timeout=httpx.Timeout(30, connect=10)) as c:
             for attempt in range(2):
@@ -95,6 +96,8 @@ class GoogleBackend:
                 if r.status_code == 401 and attempt == 0:
                     token = await self.access_token(stale=token)  # rejected before processing: safe to retry once
                     continue
+                if sync and r.status_code == 410:
+                    raise SyncTokenExpired()
                 return self._check(r, write)
         raise AssertionError("unreachable")
 
@@ -178,6 +181,32 @@ class GoogleBackend:
                 return None
             raise
         return normalize_event(e, "UTC")
+
+    async def sync_events(self, calendar_id: str, sync_token: str | None, time_min: str) -> dict[str, Any]:
+        """Calendar incremental sync (spec [T3]): every page, deleted entries included, 410 means full resync."""
+        url = f"{self.s.calendar_api_base}/calendars/{quote(calendar_id, safe='')}/events"
+        base: dict[str, Any] = {"singleEvents": "true", "maxResults": 250}
+        if sync_token:
+            base.update(syncToken=sync_token, showDeleted="true")
+        else:
+            base.update(timeMin=time_min)
+        items: list[dict[str, Any]] = []
+        page: str | None = None
+        tz = "UTC"
+        for _ in range(200):
+            data = await self._call("GET", url, params={**base, **({"pageToken": page} if page else {})}, sync=True)
+            tz = data.get("timeZone") or tz
+            items += data.get("items", [])
+            page = data.get("nextPageToken")
+            if not page:
+                break
+        out = []
+        for e in items:
+            if e.get("status") == "cancelled" and "start" not in e:
+                out.append({"id": e["id"], "etag": e.get("etag"), "status": "cancelled"})
+            else:
+                out.append(normalize_event(e, tz))
+        return {"events": out, "next_sync_token": data.get("nextSyncToken")}
 
     async def find_sent(self, message_id_header: str) -> dict[str, Any] | None:
         q = f"rfc822msgid:{message_id_header.strip('<>')}"

@@ -71,6 +71,17 @@ services:
     depends_on: { migrate: { condition: service_completed_successfully } }
     networks: [internal, model-egress]   # no route to the internet except through egress-proxy
 
+  scheduler:
+    # M5: schedules, calendar-change polling (through the broker), held runs, hourly file clean-up.
+    build: { context: .., dockerfile: deploy/Dockerfile.server }
+    command: ["opa", "scheduler"]
+    env_file: ../.env
+    environment:
+      <<: [*app-db, *internal]
+    volumes: [artifacts:/data/artifacts]
+    depends_on: { migrate: { condition: service_completed_successfully } }
+    networks: [internal]   # no internet route; provider calls go through the broker
+
   broker:
     build: { context: .., dockerfile: deploy/Dockerfile.server }
     command: ["opa", "broker"]

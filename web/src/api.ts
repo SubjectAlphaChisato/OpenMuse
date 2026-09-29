@@ -75,6 +75,7 @@ export function subscribe(onEvent: (type: string) => void): () => void {
   const es = new EventSource("/api/events", { withCredentials: true });
   const handler = (e: MessageEvent) => onEvent((e as MessageEvent & { type: string }).type);
   const types = ["task.queued", "task.running", "task.waiting_user", "task.waiting_approval", "task.blocked", "approval.requested", "approval.decided",
+    "automation.created", "automation.confirmed", "automation.updated", "automation.deleted", "automation.run", "automation.paused", "automation.resumed", "automation.held", "automation.catch_up",
     "action.succeeded", "action.failed", "action.unknown", "action.cancelled", "connection.updated", "connection.disconnected", "connection.connected", "connection.reauth_required",
     "task.succeeded", "task.failed", "task.cancelled", "message.created", "conversation.deleted"];
   types.push("artifact.created", "artifact.updated", "artifact.deleted", "memory.updated"); // M4
@@ -120,3 +121,32 @@ export const api2 = {
 };
 
 export { req }; // M4: used by apiM4.ts
+
+// ---------------------------------------------------------------- M5: automations
+
+export type AutomationKind = "once" | "daily" | "weekly" | "calendar_change";
+export interface AutomationSpec {
+  name: string; kind: AutomationKind; prompt: string; time_zone: string | null; local_time: string | null;
+  weekdays: string[] | null; run_date: string | null; connection_ids: string[];
+  calendar: { connection_id: string; calendar_id: string } | null;
+}
+export interface Occurrence { scheduled_for: string; local: string; state: string; task_id: string | null; late: boolean; missed_count: number; changes: number }
+export interface Automation {
+  id: string; name: string; kind: AutomationKind; prompt: string; description: string; time_zone: string;
+  local_time: string | null; weekdays: number[] | null; run_date: string | null; connection_ids: string[];
+  enabled: boolean; confirmed: boolean; created_by: string; paused_reason: string | null;
+  next_run_local: string | null; last_run_local: string | null; completed_at: string | null; version: number;
+  trigger: { connection_id: string; calendar_id: string; window_hours: number } | null;
+  trigger_status: { initialized: boolean; last_poll_at: string | null; last_error: string | null; pending_changes: number } | null;
+  recent: Occurrence[];
+}
+export interface AutomationPreview { description: string; upcoming: { at: string; local: string }[] }
+
+export const automationsApi = {
+  list: () => req<Automation[]>("GET", "/api/automations"),
+  preview: (spec: AutomationSpec) => req<AutomationPreview>("POST", "/api/automations/preview", spec),
+  create: (spec: AutomationSpec) => req<Automation>("POST", "/api/automations", { ...spec, confirm: true }),
+  confirm: (a: Automation) => req<Automation>("POST", `/api/automations/${a.id}/confirm`, { expected_version: a.version }),
+  setEnabled: (a: Automation, enabled: boolean) => req<Automation>("PATCH", `/api/automations/${a.id}`, { expected_version: a.version, enabled }),
+  remove: (a: Automation) => req<void>("DELETE", `/api/automations/${a.id}`),
+};

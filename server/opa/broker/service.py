@@ -28,7 +28,7 @@ from opa.core.clock import Clock
 from opa.core.settings import Settings
 from opa.db.models import Action, Approval, AuditLog, Connection, DispatchClaim, Job, Owner, Task
 from opa.db.outbox import emit
-from opa.sdk.contract import ConnectorError, OutcomeUnknown, ToolRequest, ToolResult
+from opa.sdk.contract import ConnectorError, OutcomeUnknown, SyncTokenExpired, ToolRequest, ToolResult
 
 log = logging.getLogger("opa.broker")
 
@@ -38,6 +38,10 @@ class TaskContext:
     task_id: str
     owner_id: str
     approval_mode: str
+    allowed_connection_ids: tuple[str, ...] | None = None  # None = any of the owner's connections
+
+    def allows(self, connection_id: str) -> bool:
+        return self.allowed_connection_ids is None or connection_id in self.allowed_connection_ids
 
 
 class Broker:
@@ -88,7 +92,7 @@ class Broker:
 
     async def _task_context(self, db: AsyncSession, task_id: str, lease_token: str) -> "TaskContext":
         # Column-limited reads: the broker role may not read task content or owner credentials.
-        row = (await db.execute(select(Task.id, Task.owner_id, Task.state).where(Task.id == task_id))).first()
+        row = (await db.execute(select(Task.id, Task.owner_id, Task.state, Task.allowed_connection_ids).where(Task.id == task_id))).first()
         if row is None:
             raise ConnectorError("not_found", "task not found")
         if row.state != "running":
@@ -97,12 +101,16 @@ class Broker:
         if live is None:
             raise ConnectorError("permission_denied", "worker lease is not current")
         prefs = await db.scalar(select(Owner.preferences).where(Owner.id == row.owner_id)) or {}
-        return TaskContext(task_id=row.id, owner_id=row.owner_id, approval_mode=prefs.get("approval_mode", "ask_writes"))
+        allowed = tuple(row.allowed_connection_ids) if row.allowed_connection_ids is not None else None
+        return TaskContext(task_id=row.id, owner_id=row.owner_id, approval_mode=prefs.get("approval_mode", "ask_writes"), allowed_connection_ids=allowed)
 
-    async def _connection(self, db: AsyncSession, owner_id: str, connection_id: str, capability: str, need: str, tool: ops.ToolDefinition | None = None) -> Connection:
+    async def _connection(self, db: AsyncSession, owner_id: str, connection_id: str, capability: str, need: str, tool: ops.ToolDefinition | None = None,
+                          ctx: TaskContext | None = None) -> Connection:
         conn = await db.get(Connection, connection_id)
         if conn is None or conn.owner_id != owner_id:
             raise ConnectorError("not_found", "connection not found")
+        if ctx is not None and not ctx.allows(connection_id):
+            raise ConnectorError("permission_denied", f"this task may not use {conn.account_label}; the automation that started it does not include that account")
         if conn.status != "connected":
             raise ConnectorError("auth_required", f"connection is {conn.status}")
         mode = conn.modes.get(capability, "off")
@@ -121,7 +129,7 @@ class Broker:
     async def list_tools(self, task_id: str, lease_token: str) -> list[dict[str, Any]]:
         async with self.sm() as db:
             ctx = await self._task_context(db, task_id, lease_token)
-            conns = list(await db.scalars(select(Connection).where(Connection.owner_id == ctx.owner_id, Connection.status == "connected")))
+            conns = [c for c in await db.scalars(select(Connection).where(Connection.owner_id == ctx.owner_id, Connection.status == "connected")) if ctx.allows(c.id)]
         out = []
         for tool in ops.TOOLS.values():
             eligible = []
@@ -149,7 +157,7 @@ class Broker:
                 ctx = await self._task_context(db, req.task_id, lease_token)
                 if ctx.approval_mode == "always_ask":
                     raise ConnectorError("approval_required", "the owner asked to approve every read")
-                conn = await self._connection(db, ctx.owner_id, req.connection_id, tool.capability, "read", tool)
+                conn = await self._connection(db, ctx.owner_id, req.connection_id, tool.capability, "read", tool, ctx=ctx)
                 backend = self.backend(conn)
             ops.validate_schema(tool, req.arguments)
             raw = await self._read_with_retry(backend, tool.name, req.arguments)
@@ -202,7 +210,7 @@ class Broker:
             ctx = await self._task_context(db, task_id, lease_token)
             if tool.effect == "read" and ctx.approval_mode != "always_ask":
                 raise ConnectorError("invalid_input", "reads do not need approval; call the tool directly")
-            conn = await self._connection(db, ctx.owner_id, connection_id, tool.capability, tool.effect, tool)
+            conn = await self._connection(db, ctx.owner_id, connection_id, tool.capability, tool.effect, tool, ctx=ctx)
             backend = self.backend(conn)
             files = await attach.resolve(db, ctx.owner_id, arguments.get("attachments") or [], conn.provider) if tool.name == "gmail.send_message" else None
         now = self.clock.now()
@@ -254,7 +262,7 @@ class Broker:
                     ctx = await self._task_context(db, task_id, lease_token)
                     if ctx.owner_id != action.owner_id:
                         raise ConnectorError("not_found", "action not found")
-                    conn = await self._connection(db, ctx.owner_id, action.connection_id, tool.capability, action.effect, tool)
+                    conn = await self._connection(db, ctx.owner_id, action.connection_id, tool.capability, action.effect, tool, ctx=ctx)
                     backend = self.backend(conn)
                 except ConnectorError as e:
                     return ToolResult.fail(e.code, e.message)
@@ -437,6 +445,23 @@ class Broker:
                 c.version += 1
             c.status, c.last_error = status, None
         return {"status": status, "detail": detail}
+
+    # ------------------------------------------------------------ calendar change polling (AUTO-02)
+    async def calendar_sync(self, owner_id: str, connection_id: str, calendar_id: str, sync_token: str | None, time_min: str) -> dict[str, Any]:
+        """Read calendar changes for the scheduler. Same checks as a read: ownership, status, mode, scopes."""
+        tool = ops.get_tool("calendar.list_events")
+        async with self.sm() as db:
+            conn = await self._connection(db, owner_id, connection_id, tool.capability, "read", tool)
+            backend = self.backend(conn)
+        reset = False
+        try:
+            res = await backend.sync_events(calendar_id, sync_token, time_min)
+        except SyncTokenExpired:
+            reset = True
+            res = await backend.sync_events(calendar_id, None, time_min)
+        async with self.sm() as db, db.begin():
+            await self._audit(db, owner_id, "connector.calendar_sync", connection_id, {"calendar_id": calendar_id, "changes": len(res["events"]), "full_resync": reset})
+        return {**res, "full": sync_token is None or reset, "reset": reset}
 
     async def ping_db(self) -> bool:
         async with self.sm() as db:
