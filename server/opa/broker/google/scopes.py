@@ -11,7 +11,9 @@ GMAIL_SEND = "https://www.googleapis.com/auth/gmail.send"
 CAL_READ = "https://www.googleapis.com/auth/calendar.readonly"
 CAL_WRITE = "https://www.googleapis.com/auth/calendar.events"
 
-READ = {"gmail": GMAIL_READ, "calendar": CAL_READ}
+DRIVE_READ = "https://www.googleapis.com/auth/drive.readonly"  # restricted scope, like Gmail
+
+READ = {"gmail": GMAIL_READ, "calendar": CAL_READ, "drive": DRIVE_READ}
 WRITE = {"gmail": GMAIL_SEND, "calendar": CAL_WRITE}
 
 # Scopes that also satisfy a narrower requirement.
@@ -23,7 +25,7 @@ def scopes_for_modes(modes: dict[str, str]) -> list[str]:
     for cap, mode in modes.items():
         if mode in ("read_only", "read_write"):
             out.append(READ[cap])
-        if mode == "read_write":
+        if mode == "read_write" and cap in WRITE:
             out.append(WRITE[cap])
     return sorted(set(out), key=out.index)
 
@@ -38,7 +40,7 @@ def effective(granted: list[str] | set[str]) -> set[str]:
 def allowed_mode(cap: str, wanted: str, granted: list[str]) -> str:
     """Clamp a requested mode to what Google actually granted (granular consent may drop scopes)."""
     eff = effective(granted)
-    if wanted == "read_write" and READ[cap] in eff and WRITE[cap] in eff:
+    if wanted == "read_write" and cap in WRITE and READ[cap] in eff and WRITE[cap] in eff:
         return "read_write"
     if wanted in ("read_only", "read_write") and READ[cap] in eff:
         return "read_only"

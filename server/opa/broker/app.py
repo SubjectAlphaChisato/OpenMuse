@@ -107,9 +107,10 @@ def create_broker_app(broker: Broker, *, sweep_interval: float | None = None) ->
     async def reconcile(body: ReconcileIn) -> dict[str, Any]:
         return await broker.reconcile(body.action_id, body.owner_id)
 
-    @app.post("/internal/oauth/google/exchange", dependencies=guarded)
-    async def google_exchange(body: ExchangeIn) -> dict[str, Any]:
-        return await broker.google_exchange(body.owner_id, body.candidate_connection_id, body.target_connection_id, body.code, body.code_verifier, body.redirect_uri)
+    @app.post("/internal/oauth/{provider}/exchange", dependencies=guarded)
+    async def oauth_exchange(provider: str, body: ExchangeIn) -> dict[str, Any]:
+        return await broker.oauth_exchange(provider, body.owner_id, body.candidate_connection_id, body.target_connection_id, body.code,
+                                           body.code_verifier, body.redirect_uri)
 
     @app.post("/internal/connections/revoke", dependencies=guarded)
     async def revoke(body: OwnedConnection) -> dict[str, Any]:

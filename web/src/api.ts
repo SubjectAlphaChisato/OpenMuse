@@ -96,10 +96,12 @@ export interface Action {
   id: string; task_id: string; tool_name: string; state: string; preview: Preview; provider_refs: string[];
   error: { code: string; message: string } | null; resolution: string | null; dispatch_started_at: string | null;
 }
-export interface Connector { provider: string; label: string; capabilities: string[]; available: boolean; reason: string | null }
+export interface CapabilityInfo { id: string; label: string; modes: Mode[] }
+export interface Connector { provider: string; label: string; capabilities: string[]; capability_details: CapabilityInfo[]; available: boolean; reason: string | null }
 export interface Connection {
   id: string; provider: string; account_label: string; status: string; modes: Record<string, Mode>; version: number; is_demo: boolean;
   granted_scopes: string[]; last_error: string | null; last_health_at: string | null; warning: string | null;
+  capabilities: CapabilityInfo[];
 }
 
 export const api2 = {
@@ -115,6 +117,8 @@ export const api2 = {
   setModes: (c: Connection, modes: Record<string, Mode>) => req<Connection>("PATCH", `/api/connections/${c.id}`, { modes, expected_version: c.version }),
   disconnect: (c: Connection) => req<Connection>("DELETE", `/api/connections/${c.id}`),
   setApprovalMode: (mode: "ask_writes" | "always_ask") => req<Me>("PATCH", "/api/me", { approval_mode: mode }),
+  providerAuthorize: (provider: string, modes: Record<string, Mode> | null, connectionId?: string) =>
+    req<{ authorization_url: string; scopes: string[] }>("POST", `/api/connectors/${provider}/authorize`, { modes, connection_id: connectionId ?? null }),
   googleAuthorize: (modes: Record<string, Mode>, connectionId?: string) =>
     req<{ authorization_url: string; scopes: string[] }>("POST", "/api/connectors/google/authorize", { modes, connection_id: connectionId ?? null }),
   health: (c: Connection) => req<{ status: string; detail: string | null }>("POST", `/api/connections/${c.id}/health`),

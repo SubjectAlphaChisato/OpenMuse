@@ -20,7 +20,7 @@ from opa.db.outbox import emit
 
 ACTIONS = {"browser__navigate": "navigate", "browser__snapshot": "snapshot", "browser__click_link": "click_link",
            "browser__scroll": "scroll", "browser__open_tab": "open_tab", "browser__close_tab": "close_tab"}
-PRIVATE_SOURCES = ("gmail__", "calendar__", "artifact__read", "automation__trigger_details")
+PRIVATE_SOURCES = ("gmail__", "calendar__", "drive__", "notion__", "github__", "artifact__read", "automation__trigger_details")
 
 
 def _fail(code: str, message: str) -> dict[str, Any]:

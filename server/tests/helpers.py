@@ -14,7 +14,7 @@ async def connect(client, gmail: str = "read_only", calendar: str = "read_only")
     r = await client.post("/api/connections", json={"provider": "fixture"})
     assert r.status_code == 201, r.text
     conn = r.json()
-    assert conn["modes"] == {"gmail": "read_only", "calendar": "read_only"}  # APP-01 default
+    assert conn["modes"] == {c: "read_only" for c in ("gmail", "calendar", "drive", "notion", "github")}  # APP-01: every capability read only
     if (gmail, calendar) != ("read_only", "read_only"):
         r = await client.patch(f"/api/connections/{conn['id']}", json={"modes": {"gmail": gmail, "calendar": calendar}, "expected_version": conn["version"]})
         assert r.status_code == 200, r.text

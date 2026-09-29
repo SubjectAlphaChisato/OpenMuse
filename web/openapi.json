@@ -265,20 +265,23 @@
             "title": "Connection Id"
           },
           "modes": {
-            "additionalProperties": {
-              "enum": [
-                "off",
-                "read_only",
-                "read_write"
-              ],
-              "type": "string"
-            },
-            "default": {
-              "calendar": "read_only",
-              "gmail": "read_only"
-            },
-            "title": "Modes",
-            "type": "object"
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "enum": [
+                    "off",
+                    "read_only",
+                    "read_write"
+                  ],
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modes"
           }
         },
         "title": "AuthorizeIn",
@@ -652,13 +655,35 @@
         "title": "CalendarTriggerIn",
         "type": "object"
       },
+      "CapabilityOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "modes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Modes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "modes"
+        ],
+        "title": "CapabilityOut",
+        "type": "object"
+      },
       "ConnectIn": {
         "properties": {
           "provider": {
-            "enum": [
-              "fixture",
-              "google"
-            ],
             "title": "Provider",
             "type": "string"
           }
@@ -686,6 +711,14 @@
               }
             ],
             "title": "Authorized At"
+          },
+          "capabilities": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CapabilityOut"
+            },
+            "title": "Capabilities",
+            "type": "array"
           },
           "granted_scopes": {
             "items": {
@@ -782,6 +815,13 @@
             "title": "Capabilities",
             "type": "array"
           },
+          "capability_details": {
+            "items": {
+              "$ref": "#/components/schemas/CapabilityOut"
+            },
+            "title": "Capability Details",
+            "type": "array"
+          },
           "label": {
             "title": "Label",
             "type": "string"
@@ -806,6 +846,7 @@
           "provider",
           "label",
           "capabilities",
+          "capability_details",
           "available"
         ],
         "title": "ConnectorOut",
@@ -1044,6 +1085,14 @@
               }
             ],
             "title": "Authorized At"
+          },
+          "capabilities": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CapabilityOut"
+            },
+            "title": "Capabilities",
+            "type": "array"
           },
           "granted_scopes": {
             "items": {
@@ -4141,9 +4190,20 @@
         ]
       }
     },
-    "/api/connectors/google/authorize": {
+    "/api/connectors/{provider}/authorize": {
       "post": {
-        "operationId": "authorize_api_connectors_google_authorize_post",
+        "operationId": "authorize_api_connectors__provider__authorize_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {

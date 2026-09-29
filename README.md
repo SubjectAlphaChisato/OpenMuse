@@ -76,18 +76,29 @@ The app only ever requests these scopes, and write scopes only when you allow ch
 |---|---|---|
 | Gmail | `https://www.googleapis.com/auth/gmail.readonly` | `https://www.googleapis.com/auth/gmail.send` |
 | Calendar | `https://www.googleapis.com/auth/calendar.readonly` | `https://www.googleapis.com/auth/calendar.events` |
+| Drive (off by default) | `https://www.googleapis.com/auth/drive.readonly` | (no write tools yet) |
 
 Plus `openid` and `email` to identify the account.
 
-1. In Google Cloud Console, create a project and enable the **Gmail API** and **Google Calendar API**.
+1. In Google Cloud Console, create a project and enable the **Gmail API** and **Google Calendar API** (and the **Google Drive API** if you will turn on Drive).
 2. Configure the **OAuth consent screen**. For personal use choose *External*, keep the app in *Testing*, and add your own Google address as a test user. If you have a Google Workspace domain, *Internal* avoids the limits below.
 3. Create an **OAuth client ID** of type *Web application* with this exact authorized redirect URI: `http://127.0.0.1:8080/api/oauth/google/callback` (or your HTTPS origin plus `/api/oauth/google/callback`, also set as `OPA_GOOGLE_REDIRECT_URI`).
 4. Put the client ID in `OPA_GOOGLE_CLIENT_ID` for the api and broker, and the secret in `OPA_GOOGLE_CLIENT_SECRET` for the broker only. Set `OPA_MODE=live`.
 5. In the app, open Connections and choose **Connect with Google**.
 
-**Limits you should know about.** Gmail read and send are *restricted* scopes. While an External app is in Testing, Google expires its refresh tokens 7 days after sign-in; the app warns you on day 6 and shows **Reconnect**. Publishing an External app with restricted scopes requires Google's verification and a security assessment, which is outside this project. Calendar scopes are *sensitive*, not restricted.
+**Limits you should know about.** Gmail read and send are *restricted* scopes. While an External app is in Testing, Google expires its refresh tokens 7 days after sign-in; the app warns you on day 6 and shows **Reconnect**. Publishing an External app with restricted scopes requires Google's verification and a security assessment, which is outside this project. Calendar scopes are *sensitive*, not restricted. Drive read-only is *restricted*, like Gmail. Google Docs, Sheets, and Slides are read as Markdown, CSV, and plain text.
 
 **Opt-in live check.** After connecting an account, `server/scripts/live_smoke_google.py` runs read-only calls against real Google (instructions in the file). It is never run by the test suite; writes need extra flags and a throwaway calendar.
+
+## Connect Notion and GitHub (live mode, read only)
+
+Both are read-only in this release. Set `OPA_PUBLIC_BASE_URL` to the address you open the app at (default `http://127.0.0.1:8080`); the callbacks are `{OPA_PUBLIC_BASE_URL}/api/oauth/notion/callback` and `.../github/callback`. Client IDs go to the api and broker; secrets go to the broker only.
+
+**Notion.** Create a *public* integration at notion.so/profile/integrations, give it only the **Read content** capability, and add the Notion callback as a redirect URI. Put its OAuth client ID and secret in `OPA_NOTION_CLIENT_ID` and `OPA_NOTION_CLIENT_SECRET`. When you connect, Notion asks which pages to share; the assistant sees only those. Details: `docs/providers/notion.md`.
+
+**GitHub.** Create a **GitHub App** (not an OAuth App: an OAuth App would need the `repo` scope, which also grants write). Set the callback URL, leave *Expire user authorization tokens* on, and grant only read-only **Contents**, **Issues**, **Pull requests**, and **Metadata**. Put the app's client ID, a client secret, and its URL slug in `OPA_GITHUB_CLIENT_ID`, `OPA_GITHUB_CLIENT_SECRET`, and `OPA_GITHUB_APP_SLUG`, then install the app on the repositories you want the assistant to read. Details: `docs/providers/github.md`.
+
+Neither has been exercised against the real service yet; see `IMPLEMENTATION_STATUS.md`.
 
 ## Tests
 

@@ -20,8 +20,11 @@ from opa.broker import attachments as attach
 from opa.broker import ops
 from opa.broker.fixture import FixtureBackend
 from opa.broker.google import scopes as gscopes
-from opa.broker.google.adapter import GoogleBackend, ReauthRequired
-from opa.broker.google.oauth import GoogleOAuth
+from opa.broker.google.adapter import GoogleBackend
+from opa.broker.tokens import ReauthRequired, secret_from_token
+from opa.broker.providers_oauth import client_for
+from opa.broker.rest_backends import GitHubBackend, NotionBackend
+from opa.connectors import registry
 from opa.broker.vault import Vault
 from opa.core.canonical import args_hash
 from opa.core.clock import Clock
@@ -60,12 +63,16 @@ class Broker:
             if self.settings.mode != "demo":
                 raise ConnectorError("permission_denied", "fixture connections are disabled in live mode")
             return FixtureBackend(self.sm, conn.id, self.clock, conn.account_label)
-        if conn.provider == "google":
+        if conn.provider in registry.OAUTH_PROVIDERS:
             if self.settings.mode != "live":
                 raise ConnectorError("permission_denied", "demo mode never contacts real providers")
             if self.vault is None:
                 raise ConnectorError("auth_required", "the broker has no key-encryption key (OPA_BROKER_KEK)")
-            return GoogleBackend(self.settings, self.sm, self.vault, conn.id, self.clock, self.google_transport, on_reauth=self._mark_reauth)
+            if conn.provider == "google":
+                return GoogleBackend(self.settings, self.sm, self.vault, conn.id, self.clock, self.google_transport, on_reauth=self._mark_reauth)
+            cls = {"notion": NotionBackend, "github": GitHubBackend}[conn.provider]
+            return cls(self.settings, self.sm, self.vault, conn.id, self.clock, client_for(conn.provider, self.settings, self.google_transport),
+                       self.google_transport, on_reauth=self._mark_reauth)
         raise ConnectorError("auth_required", f"provider {conn.provider} is not available")
 
     def _provider_allowed(self, provider: str) -> bool:
@@ -73,7 +80,8 @@ class Broker:
 
     @staticmethod
     def _missing_scopes(conn: Connection, tool: ops.ToolDefinition) -> list[str]:
-        if conn.provider != "google":
+        spec = registry.get(conn.provider)
+        if spec is None or not spec.scoped:
             return []
         eff = gscopes.effective(conn.granted_scopes)
         return [s for s in tool.required_scopes if s not in eff]
@@ -88,7 +96,8 @@ class Broker:
             conn.version += 1
             await self._audit(db, conn.owner_id, "connection.reauth_required", conn.id, {"provider": conn.provider})
             await emit(db, conn.owner_id, "connection.reauth_required", {"connection_id": conn.id},
-                       notify=("Reconnect your Google account", f"Access for {conn.account_label} expired or was revoked. Reconnect it to continue."))
+                       notify=(f"Reconnect your {registry.SHORT.get(conn.provider, conn.provider)} account",
+                               f"Access for {conn.account_label} expired or was revoked. Reconnect it to continue."))
 
     async def _task_context(self, db: AsyncSession, task_id: str, lease_token: str) -> "TaskContext":
         # Column-limited reads: the broker role may not read task content or owner credentials.
@@ -200,6 +209,14 @@ class Broker:
             kept, dropped = ops.filter_messages(data["messages"])
             return {"thread_id": data["thread_id"], "filtered_count": dropped,
                     "messages": [{k: m[k] for k in ("id", "from", "to", "subject", "date")} | {"body": ops.untrusted(m["body"])} for m in kept]}
+        # v0.2 connectors: document, page, issue, and file text is untrusted content, like email bodies
+        if tool_name in ("drive.read_file", "notion.read_page", "github.read_file"):
+            return {**{k: v for k, v in data.items() if k not in ("text", "truncated")}, "content": ops.untrusted(data.get("text", "")) | {"truncated": data.get("truncated", False)}}
+        if tool_name == "github.get_issue":
+            return {**data, "body": ops.untrusted(data.get("body", "")),
+                    "comments": [{**c, "body": ops.untrusted(c.get("body", ""), 5000)} for c in data.get("comments", [])]}
+        if tool_name == "notion.query_data_source":
+            return {**data, "rows": [{**r, "properties": {k: ops.untrusted(v, 2000) for k, v in r["properties"].items()}} for r in data.get("rows", [])]}
         return data
 
     # ------------------------------------------------------------ proposals
@@ -376,29 +393,37 @@ class Broker:
         return len(rows)
 
     # ------------------------------------------------------------ OAuth lifecycle (CON-01)
-    async def google_exchange(self, owner_id: str, candidate_id: str, target_id: str | None, code: str, code_verifier: str, redirect_uri: str) -> dict[str, Any]:
+    async def oauth_exchange(self, provider: str, owner_id: str, candidate_id: str, target_id: str | None, code: str, code_verifier: str,
+                             redirect_uri: str) -> dict[str, Any]:
+        """Exchange the code, identify the account, and store its tokens. Signing in again with the same account reuses its connection."""
+        if provider not in registry.OAUTH_PROVIDERS:
+            raise ConnectorError("invalid_input", f"unknown provider {provider}")
         if self.vault is None:
             raise ConnectorError("auth_required", "the broker has no key-encryption key (OPA_BROKER_KEK)")
-        oauth = GoogleOAuth(self.settings, self.google_transport)
-        token = await oauth.exchange(code, code_verifier, redirect_uri)
-        ident = await oauth.identity(token["access_token"])
-        granted = sorted(set((token.get("scope") or "").split()))
+        client = client_for(provider, self.settings, self.google_transport)
+        token = await client.exchange(code, code_verifier, redirect_uri)
+        if provider == "google" and not token.get("refresh_token"):
+            raise ConnectorError("auth_required", "Google did not return a refresh token; remove the app's access in your Google account and connect again")
+        ident = await client.identify(token)
+        granted = client.granted_scopes(token)
         async with self.sm() as db, db.begin():
-            existing = await db.scalar(select(Connection).where(Connection.owner_id == owner_id, Connection.provider == "google",
+            existing = await db.scalar(select(Connection).where(Connection.owner_id == owner_id, Connection.provider == provider,
                                                                   Connection.provider_account_id == ident["sub"], Connection.status != "disconnected"))
             target = await db.get(Connection, target_id) if target_id else None
             if existing is not None:
                 connection_id = existing.id
-            elif target is not None and target.owner_id == owner_id and target.provider_account_id == ident["sub"]:
+            elif target is not None and target.owner_id == owner_id and target.provider == provider and target.provider_account_id == ident["sub"]:
                 connection_id = target.id
             else:
                 connection_id = candidate_id
-            secret = {"access_token": token["access_token"], "refresh_token": token["refresh_token"], "scopes": granted,
-                      "expires_at": (self.clock.now() + timedelta(seconds=int(token.get("expires_in", 3600)))).isoformat()}
-            await self.vault.store(db, connection_id, secret)
-            await self._audit(db, owner_id, "connection.authorized", connection_id, {"provider": "google", "scopes": granted})
-        return {"connection_id": connection_id, "email": ident["email"], "account_id": ident["sub"], "granted_scopes": granted,
+            await self.vault.store(db, connection_id, secret_from_token(token, self.clock.now(), {"scopes": granted}))
+            await self._audit(db, owner_id, "connection.authorized", connection_id, {"provider": provider, "scopes": granted})
+        return {"connection_id": connection_id, "label": ident["label"], "account_id": ident["sub"], "granted_scopes": granted,
                 "is_new": connection_id == candidate_id, "account_mismatch": bool(target_id) and connection_id != target_id}
+
+    async def google_exchange(self, owner_id: str, candidate_id: str, target_id: str | None, code: str, code_verifier: str, redirect_uri: str) -> dict[str, Any]:
+        res = await self.oauth_exchange("google", owner_id, candidate_id, target_id, code, code_verifier, redirect_uri)
+        return {**res, "email": res["label"]}
 
     async def revoke(self, connection_id: str, owner_id: str) -> dict[str, Any]:
         """Attempt provider revocation, then delete the local credential regardless of the outcome."""
@@ -406,13 +431,16 @@ class Broker:
             conn = await db.get(Connection, connection_id)
             if conn is None or conn.owner_id != owner_id:
                 raise ConnectorError("not_found", "connection not found")
-        if conn.provider != "google" or self.vault is None:
+        if conn.provider not in registry.OAUTH_PROVIDERS or self.vault is None:
             return {"revoked": conn.provider == "fixture", "error": None if conn.provider == "fixture" else "no credential store"}
         async with self.sm() as db:
             secret = await self.vault.load(db, connection_id)
         revoked, error = (False, "no stored credential")
         if secret:
-            revoked, error = await GoogleOAuth(self.settings, self.google_transport).revoke(secret["refresh_token"])
+            try:
+                revoked, error = await client_for(conn.provider, self.settings, self.google_transport).revoke(secret)
+            except ConnectorError as e:
+                revoked, error = False, e.message
         async with self.sm() as db, db.begin():
             await self.vault.delete(db, connection_id)
             await self._audit(db, owner_id, "connection.revoked" if revoked else "connection.revocation_failed", connection_id, {"error": error})
@@ -443,11 +471,12 @@ class Broker:
         detail = None
         try:
             backend = self.backend(conn)
-            if isinstance(backend, GoogleBackend):
-                await GoogleOAuth(self.settings, self.google_transport).identity(await backend.access_token())
+            if conn.provider in registry.OAUTH_PROVIDERS:
+                token = await backend.tokens.access_token()
+                await client_for(conn.provider, self.settings, self.google_transport).check(token)
             status = "connected"
-        except ReauthRequired:
-            return {"status": "reauth_required", "detail": "Google access was revoked or expired; reconnect the account"}
+        except ReauthRequired as e:
+            return {"status": "reauth_required", "detail": e.message}
         except ConnectorError as e:
             if e.code == "auth_required":
                 await self._mark_reauth(connection_id)

@@ -13,8 +13,7 @@ from opa.core.settings import Settings
 from opa.sdk.contract import ConnectorError
 
 
-class InvalidGrant(Exception):
-    """The refresh token was revoked or expired; the owner must reconnect."""
+from opa.broker.tokens import InvalidGrant  # noqa: E402,F401  (shared; re-exported)
 
 
 def _error_code(exc: Exception) -> str | None:

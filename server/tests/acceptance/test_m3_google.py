@@ -78,7 +78,7 @@ async def test_authorize_url_and_connect(client, fake, sessionmaker):
 
     conn, _ = await connect_google(client, fake)
     assert (conn["provider"], conn["account_label"], conn["status"]) == ("google", "owner@gmail.example", "connected")
-    assert conn["modes"] == {"gmail": "read_only", "calendar": "read_only"}
+    assert conn["modes"] == {"gmail": "read_only", "calendar": "read_only", "drive": "off"}
     assert set(conn["granted_scopes"]) == {"openid", "email", GMAIL_READ, CAL_READ}
     async with sessionmaker() as db:
         cred = await db.scalar(select(BrokerCredential).where(BrokerCredential.connection_id == conn["id"]))
@@ -119,13 +119,13 @@ async def test_incremental_scope_for_writes(client, fake):
     assert set(auth["scopes"]) == {"openid", "email", GMAIL_READ, GMAIL_SEND}
     again, _ = await connect_google(client, fake, {"gmail": "read_write"}, connection_id=conn["id"])
     assert again["id"] == conn["id"]
-    assert again["modes"] == {"gmail": "read_write", "calendar": "read_only"}  # calendar untouched
+    assert again["modes"] == {"gmail": "read_write", "calendar": "read_only", "drive": "off"}  # calendar untouched
     assert {GMAIL_SEND, CAL_READ} <= set(again["granted_scopes"])  # earlier grants are kept
 
 
 async def test_granular_consent_limits_the_mode(client, fake):
     conn, loc = await connect_google(client, fake, {"gmail": "read_write", "calendar": "read_write"}, grant=[GMAIL_READ, CAL_READ, CAL_WRITE])
-    assert conn["modes"] == {"gmail": "read_only", "calendar": "read_write"}
+    assert conn["modes"] == {"gmail": "read_only", "calendar": "read_write", "drive": "off"}
     assert "gmail" in loc["note"][0]
 
 

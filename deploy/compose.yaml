@@ -53,6 +53,10 @@ services:
       OPA_WEB_DIST_DIR: /web
       OPA_GOOGLE_CLIENT_ID: ${OPA_GOOGLE_CLIENT_ID:-}        # the api builds the consent URL; it never sees the secret
       OPA_GOOGLE_REDIRECT_URI: ${OPA_GOOGLE_REDIRECT_URI:-http://127.0.0.1:8080/api/oauth/google/callback}
+      OPA_PUBLIC_BASE_URL: ${OPA_PUBLIC_BASE_URL:-http://127.0.0.1:8080}
+      OPA_NOTION_CLIENT_ID: ${OPA_NOTION_CLIENT_ID:-}        # client ids only; secrets stay in the broker
+      OPA_GITHUB_CLIENT_ID: ${OPA_GITHUB_CLIENT_ID:-}
+      OPA_GITHUB_APP_SLUG: ${OPA_GITHUB_APP_SLUG:-}
       OPA_BROWSER_URL: http://browser:8082   # M6: live view, takeover, stop
       OPA_EXPORT_DIR: /data/exports
     ports: ["127.0.0.1:8080:8080"]   # localhost only (AUTH-01); see README for HTTPS
@@ -97,6 +101,11 @@ services:
       OPA_GOOGLE_CLIENT_ID: ${OPA_GOOGLE_CLIENT_ID:-}
       OPA_GOOGLE_CLIENT_SECRET: ${OPA_GOOGLE_CLIENT_SECRET:-}   # broker only
       OPA_GOOGLE_OAUTH_TESTING: ${OPA_GOOGLE_OAUTH_TESTING:-true}
+      OPA_PUBLIC_BASE_URL: ${OPA_PUBLIC_BASE_URL:-http://127.0.0.1:8080}   # token exchange repeats the redirect URI
+      OPA_NOTION_CLIENT_ID: ${OPA_NOTION_CLIENT_ID:-}
+      OPA_NOTION_CLIENT_SECRET: ${OPA_NOTION_CLIENT_SECRET:-}   # broker only
+      OPA_GITHUB_CLIENT_ID: ${OPA_GITHUB_CLIENT_ID:-}
+      OPA_GITHUB_CLIENT_SECRET: ${OPA_GITHUB_CLIENT_SECRET:-}   # broker only
     volumes: [artifacts:/data/artifacts:ro]   # M4: verifies approved attachment bytes; never writes files
     depends_on: { migrate: { condition: service_completed_successfully } }
     networks: [internal, provider-egress]

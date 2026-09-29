@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last updated: 2026-09-28 (release packaging) • Spec: `docs/open-muse-implementation-requirements.md` v0.1.1 • Design: `docs/tech-design.md`
+Last updated: 2026-09-28 (v0.2 read-only connectors) • Spec: `docs/open-muse-implementation-requirements.md` v0.1.1 • Design: `docs/tech-design.md`
 
 ## Milestones
 
@@ -12,6 +12,7 @@ Last updated: 2026-09-28 (release packaging) • Spec: `docs/open-muse-implement
 | M4 Useful outputs | **Implemented and verified locally** (fixture provider; exit criterion covered by `test_m4_exit_brief_created_revised_downloaded_and_emailed`; see M4 evidence below) |
 | M5 Automation | **Implemented and verified locally** (fixture provider; calendar sync also against the fake Google; see M5 evidence below) |
 | M6 Browser and release | **Implemented, packaged, and verified locally.** All automated release gates pass (`scripts/release_check.py`). Manual gates still open: A17b screen-reader pass, a Docker Compose build and run, live Google and Claude checks (see `docs/RELEASING.md`) |
+| v0.2 Read-only connectors | **Implemented; live verification pending credentials.** Google Drive, Notion, and GitHub (GitHub App), read only. Verified against in-process fakes of each provider's HTTP API and the demo account, not the real services (see v0.2 evidence below) |
 
 ## Requirement status
 
@@ -111,8 +112,15 @@ Totals on 2026-09-28 after release packaging: 237 pytest cases pass (206 through
 - **Release-gate tests.** `tests/test_release_gates.py` checks every route in the OpenAPI document for anonymous rejection (more than 50) and CSRF on every state change, 17 internal routes for the internal token, and scans the code so that only `approvals.decide` can set a state to approved (a planted second assignment fails it).
 - **Secret scan.** `scripts/check_secrets.py` found none in 165 files; a planted API key and a filled-in `OPA_BROKER_KEK` were both caught.
 
+## v0.2 connector verification
+
+- `tests/acceptance/test_v02_connectors.py` (12 tests) runs against strict fakes (`tests/fake_providers.py`, Drive in `tests/fake_google.py`) that reject wrong methods, missing `Notion-Version` or `X-GitHub-Api-Version` headers, wrong client authentication, and PKCE on Notion. Covered: connect and callback for each provider (state bound to provider), Drive opt-in scope with the scope-required prompt, Docs export and binary refusal, Drive query escaping, Notion nested-block reading with paging and budget, data-source queries, GitHub rate limits, file decoding and directory refusal, single-flight refresh and reauth on `invalid_grant`, revocation on disconnect, health checks, `mode_not_supported`, and untrusted marking.
+- `test_v02_demo.py`: the demo account runs Drive, Notion, and GitHub tools through the worker, including a Notion page carrying a prompt-injection line that stays marked untrusted.
+- Eight code mutations (dropping the version header, skipping refresh, unescaped Drive query, ignoring `next_cursor`, and others) were each caught by the suite and reverted. Full suite: 250 passed; lint clean; web type check and build pass.
+
 ## Not verified / known limitations
 
+- v0.2: no real Drive, Notion, or GitHub API has been called. GitHub token revocation sends HTTP Basic client authentication, which GitHub's example omits; verify live. The GitHub App install link (`OPA_GITHUB_APP_SLUG`) is configuration only; the UI does not yet guide installation. Notion page reading stops at nesting depth 2 and 400 blocks, and says so. Drive reads Google Docs, Sheets, Slides, and plain-text files only. None of the three has write tools, and automations cannot yet trigger on their changes.
 - M6: the live view sends screenshots about three times a second rather than a CDP screencast, so it is not smooth video. Owner input during takeover is clicks, typed text, a fixed set of keys, and scrolling. Page JavaScript runs (sites need it) but cannot reach private addresses; the agent itself cannot run scripts. The data-sharing check looks for 12-character runs and email addresses of private context in the URL path and query; it can miss paraphrased or re-encoded data and can over-trigger on common phrases. Browser sessions live in the browser service's memory, so restarting it ends them (the worker opens a fresh one). Export is built synchronously in the request. Backup needs PostgreSQL 16 client tools; the Compose image installs them from the PGDG repository, which has not been built. Restore requires an empty database and file directory.
 - **Docker Compose has not been run.** Docker is not installed on the development machine. `deploy/compose.yaml` parses and its anchors resolve, but images have not been built.
 - Compose now declares the broker, egress proxy, database roles, and isolated networks, but it has not been run, so the network half of T-NET-01 (the worker cannot reach any host except through the proxy) is unverified. The proxy's policy half is tested.
@@ -127,4 +135,4 @@ Totals on 2026-09-28 after release packaging: 237 pytest cases pass (206 through
 
 ## External blockers
 
-Live verification of M3 needs a Google Cloud project, an OAuth client, and a test Google account (README, Connect Google). No other external blockers.
+Live verification of M3 needs a Google Cloud project, an OAuth client, and a test Google account (README, Connect Google). Live verification of v0.2 needs a Notion public integration and a GitHub App (README, Connect Notion and GitHub). No other external blockers.

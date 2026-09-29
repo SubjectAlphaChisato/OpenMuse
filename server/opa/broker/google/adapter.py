@@ -12,24 +12,22 @@ from urllib.parse import quote
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from opa.broker.google.http import hx as httpx
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from opa.broker.google import mime
-from opa.broker.google.oauth import GoogleOAuth, InvalidGrant
+from opa.broker.google.oauth import GoogleOAuth
 from opa.broker.vault import Vault
 from opa.core.clock import Clock
 from opa.core.settings import Settings
-from opa.db.models import BrokerCredential
 from opa.sdk.contract import ConnectorError, OutcomeUnknown, SyncTokenExpired
 
 REFRESH_MARGIN = timedelta(seconds=60)
+DRIVE_EXPORT = {"application/vnd.google-apps.document": "text/markdown", "application/vnd.google-apps.spreadsheet": "text/csv",
+                "application/vnd.google-apps.presentation": "text/plain"}
 METADATA_HEADERS = ["From", "To", "Cc", "Subject", "Date"]
 
 
-class ReauthRequired(ConnectorError):
-    def __init__(self) -> None:
-        super().__init__("auth_required", "Google access was revoked or expired; reconnect the account")
+from opa.broker.tokens import TokenManager  # noqa: E402  (re-exported for callers)
 
 
 class GoogleBackend:
@@ -45,43 +43,15 @@ class GoogleBackend:
         self.transport = transport
         self.oauth = GoogleOAuth(settings, transport)
         self.on_reauth = on_reauth  # async callback(connection_id) when the grant is gone
+        self.tokens = TokenManager(sm, vault, clock, connection_id, self.oauth, label="Google", on_reauth=on_reauth)
 
-    # ------------------------------------------------------------ tokens (single-flight refresh)
+    # ------------------------------------------------------------ tokens (single-flight refresh, shared with other providers)
     async def access_token(self, *, stale: str | None = None) -> str:
-        """Return a valid access token. Refreshes under a row lock so concurrent callers refresh once."""
-        async with self.sm() as db, db.begin():
-            row = await db.scalar(select(BrokerCredential).where(BrokerCredential.connection_id == self.connection_id).with_for_update())
-            if row is None:
-                raise ConnectorError("auth_required", "no stored Google credential; reconnect the account")
-            secret = self.vault.decrypt(row.dek_wrapped, row.secret_enc, self.connection_id)
-            expires = datetime.fromisoformat(secret["expires_at"])
-            fresh_enough = expires - REFRESH_MARGIN > self.clock.now()
-            if fresh_enough and (stale is None or secret["access_token"] != stale):
-                return secret["access_token"]
-            try:
-                tok = await self.oauth.refresh(secret["refresh_token"])
-            except InvalidGrant:
-                reauth = True
-            else:
-                reauth = False
-                secret["access_token"] = tok["access_token"]
-                secret["expires_at"] = (self.clock.now() + timedelta(seconds=int(tok.get("expires_in", 3600)))).isoformat()
-                if tok.get("refresh_token"):
-                    secret["refresh_token"] = tok["refresh_token"]
-                if tok.get("scope"):
-                    secret["scopes"] = sorted(set(tok["scope"].split()))
-                row.dek_wrapped, row.secret_enc = self.vault.encrypt(secret, self.connection_id)
-                row.access_expires_at = datetime.fromisoformat(secret["expires_at"])
-                return secret["access_token"]
-        if reauth:
-            if self.on_reauth:
-                await self.on_reauth(self.connection_id)
-            raise ReauthRequired()
-        raise AssertionError("unreachable")
+        return await self.tokens.access_token(stale=stale)
 
     # ------------------------------------------------------------ HTTP with error mapping
     async def _call(self, method: str, url: str, *, write: bool = False, params: Any = None, json: Any = None, headers: dict[str, str] | None = None,
-                    sync: bool = False) -> Any:
+                    sync: bool = False, raw: bool = False) -> Any:
         token = await self.access_token()
         async with httpx.AsyncClient(transport=self.transport, timeout=httpx.Timeout(30, connect=10)) as c:
             for attempt in range(2):
@@ -98,6 +68,8 @@ class GoogleBackend:
                     continue
                 if sync and r.status_code == 410:
                     raise SyncTokenExpired()
+                if raw and r.status_code == 200:
+                    return r.text
                 return self._check(r, write)
         raise AssertionError("unreachable")
 
@@ -154,6 +126,30 @@ class GoogleBackend:
             t = await self._call("GET", f"{g}/users/me/threads/{quote(a['thread_id'])}", params={"format": "full"})
             msgs = [mime.normalize_message(m, with_body=True) for m in t.get("messages", [])][-20:]
             return {"data": {"thread_id": t["id"], "messages": msgs}, "source_refs": [f"gmail:{m['id']}" for m in msgs]}
+        if tool == "drive.search_files":
+            q = a["query"].replace("\\", "\\\\").replace("'", "\\'")  # Drive query syntax: escape backslash and quote
+            params = {"q": f"(name contains '{q}' or fullText contains '{q}') and trashed = false", "pageSize": max(1, min(a.get("max_results") or 20, 50)),
+                      "fields": "nextPageToken,files(id,name,mimeType,modifiedTime,owners(emailAddress),webViewLink,size)"}
+            if a.get("page_token"):
+                params["pageToken"] = a["page_token"]
+            data = await self._call("GET", f"{self.s.drive_api_base}/files", params=params)
+            files = [{"id": f["id"], "name": f.get("name"), "mime_type": f.get("mimeType"), "modified": f.get("modifiedTime"),
+                      "owners": [o.get("emailAddress") for o in f.get("owners", [])], "url": f.get("webViewLink")} for f in data.get("files", [])]
+            return {"data": {"files": files, "next_page_token": data.get("nextPageToken")}, "source_refs": [f"drive:{f['id']}" for f in files]}
+        if tool == "drive.read_file":
+            fid = quote(a["file_id"], safe="")
+            meta = await self._call("GET", f"{self.s.drive_api_base}/files/{fid}", params={"fields": "id,name,mimeType,size,webViewLink"})
+            mime_type = meta.get("mimeType", "")
+            if mime_type in DRIVE_EXPORT:
+                text = await self._call("GET", f"{self.s.drive_api_base}/files/{fid}/export", params={"mimeType": DRIVE_EXPORT[mime_type]}, raw=True)
+            elif mime_type.startswith("text/") or mime_type in ("application/json",):
+                if int(meta.get("size") or 0) > 10 * 1024 * 1024:
+                    raise ConnectorError("invalid_input", "unsupported_format: the file is larger than 10 MB")
+                text = await self._call("GET", f"{self.s.drive_api_base}/files/{fid}", params={"alt": "media"}, raw=True)
+            else:
+                raise ConnectorError("invalid_input", f"unsupported_format: {mime_type} files cannot be read as text")
+            return {"data": {"file_id": meta["id"], "name": meta.get("name"), "mime_type": mime_type, "url": meta.get("webViewLink"),
+                             "text": text[:50_000], "truncated": len(text) > 50_000}, "source_refs": [f"drive:{meta['id']}"]}
         if tool == "calendar.list_calendars":
             data = await self._call("GET", f"{cal}/users/me/calendarList")
             cals = [{"id": c["id"], "summary": c.get("summary", ""), "time_zone": c.get("timeZone"), "primary": bool(c.get("primary"))} for c in data.get("items", [])]

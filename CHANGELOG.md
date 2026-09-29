@@ -2,6 +2,14 @@
 
 All notable changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## Unreleased (v0.2 connectors)
+
+### Added
+- **Read-only connectors:** Google Drive (search, and Docs/Sheets/Slides exported as Markdown, CSV, and text), Notion (search, pages with nested blocks, data-source queries), and GitHub through a GitHub App (repositories, issue and pull-request search, issues with comments, text files). All provider content is marked untrusted, and the browser's data-sharing approval covers it.
+- A provider registry that declares each connector's capabilities and allowed modes; the API refuses a mode a capability does not support (`mode_not_supported`).
+- Generic OAuth routes (`/api/connectors/{provider}/authorize`, `/api/oauth/{provider}/callback`) and a shared single-flight token manager used by every provider.
+- The Connections screen lists every configured provider and shows only the modes each capability supports.
+
 ## 0.1.0 — unreleased
 
 First release candidate of Open Personal Agent, implementing `docs/open-muse-implementation-requirements.md` v0.1.1.

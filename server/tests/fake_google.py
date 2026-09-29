@@ -19,6 +19,7 @@ from opa.broker.google.http import hx as httpx
 
 G = "https://www.googleapis.com/auth/"
 GMAIL_READ, GMAIL_SEND, CAL_READ, CAL_WRITE = G + "gmail.readonly", G + "gmail.send", G + "calendar.readonly", G + "calendar.events"
+DRIVE_READ = G + "drive.readonly"
 
 
 def _b64(data: bytes) -> str:
@@ -176,6 +177,8 @@ class FakeGoogle:
             return self._gmail(request, tok)
         if url.host == "www.googleapis.com" and url.path.startswith("/calendar/v3"):
             return self._calendar(request, tok)
+        if url.host == "www.googleapis.com" and url.path.startswith("/drive/v3"):
+            return self._drive(request, tok)
         return _err(404, "no such endpoint")
 
     def _token(self, request: httpx.Request) -> httpx.Response:
@@ -350,3 +353,35 @@ class FakeGoogle:
             self._bump(cal, eid)
             return httpx.Response(200, json=ev)
         return _err(405, "method not allowed")
+
+
+    # ------------------------------------------------------------------ Drive (read-only)
+    DRIVE = {
+        "gdoc1": {"name": "Plan for Bob's team", "mimeType": "application/vnd.google-apps.document",
+                  "export": {"text/markdown": "# Plan\n\nHire two engineers.\n", "text/plain": "Plan"}},
+        "gsheet1": {"name": "Budget", "mimeType": "application/vnd.google-apps.spreadsheet", "export": {"text/csv": "item,amount\nTools,1200\n"}},
+        "gtxt": {"name": "notes.txt", "mimeType": "text/plain", "content": "Remember the offsite."},
+        "gimg": {"name": "photo.png", "mimeType": "image/png", "content": None},
+    }
+
+    def _drive(self, request, tok):
+        if (denied := self._need(tok, DRIVE_READ)):
+            return denied
+        params = request.url.params
+        parts = request.url.path.removeprefix("/drive/v3").strip("/").split("/")
+        if parts == ["files"]:
+            self.last_drive_q = params.get("q", "")
+            files = [{"id": fid, "name": f["name"], "mimeType": f["mimeType"], "modifiedTime": "2026-09-20T00:00:00Z",
+                      "owners": [{"emailAddress": "owner@gmail.example"}], "webViewLink": f"https://drive.google.com/file/d/{fid}"}
+                     for fid, f in self.DRIVE.items()]
+            return httpx.Response(200, json={"files": files})
+        f = self.DRIVE.get(parts[1]) if len(parts) >= 2 else None
+        if f is None:
+            return _err(404, "File not found.")
+        if parts[2:] == ["export"]:
+            text = f.get("export", {}).get(params.get("mimeType"))
+            return httpx.Response(200, text=text) if text is not None else _err(400, "Export only supports Docs Editors files.")
+        if params.get("alt") == "media":
+            return httpx.Response(200, text=f["content"]) if f.get("content") is not None else _err(403, "Only files with binary content can be downloaded.")
+        return httpx.Response(200, json={"id": parts[1], "name": f["name"], "mimeType": f["mimeType"], "size": str(len(f.get("content") or "")),
+                                         "webViewLink": f"https://drive.google.com/file/d/{parts[1]}"})

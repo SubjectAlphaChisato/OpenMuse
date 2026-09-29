@@ -64,7 +64,24 @@ class Settings(BaseSettings):
     google_userinfo_url: str = "https://openidconnect.googleapis.com/v1/userinfo"
     gmail_api_base: str = "https://gmail.googleapis.com/gmail/v1"
     calendar_api_base: str = "https://www.googleapis.com/calendar/v3"
+    drive_api_base: str = "https://www.googleapis.com/drive/v3"
     oauth_state_ttl_minutes: int = 10
+    public_base_url: str = "http://127.0.0.1:8080"  # OAuth callbacks are {public_base_url}/api/oauth/{provider}/callback
+
+    # Notion (public integration). The api needs only the client ID; the secret is read by the broker alone.
+    notion_client_id: str | None = None
+    notion_client_secret: str | None = None
+    notion_auth_url: str = "https://api.notion.com/v1/oauth/authorize"
+    notion_api_base: str = "https://api.notion.com/v1"
+    notion_version: str = "2026-03-11"
+
+    # GitHub (a GitHub App with read-only permissions; its user tokens are limited to installed repositories)
+    github_client_id: str | None = None
+    github_client_secret: str | None = None
+    github_app_slug: str | None = None  # for the "choose repositories" install link
+    github_auth_url: str = "https://github.com/login/oauth/authorize"
+    github_token_url: str = "https://github.com/login/oauth/access_token"
+    github_api_base: str = "https://api.github.com"
 
     # M5: scheduler (AUTO-01, AUTO-02)
     scheduler_tick_seconds: int = 15

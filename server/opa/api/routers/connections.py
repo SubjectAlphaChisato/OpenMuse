@@ -10,8 +10,7 @@ from sqlalchemy import select
 
 from opa.api.actions_service import invalidate_actions, open_actions_for_connection
 from opa.api.deps import ClockDep, DbDep, OwnerDep, SettingsDep, get_owned
-from opa.api.routers.oauth import google_ready
-from opa.broker.google import scopes as gscopes
+from opa.connectors import registry
 from opa.scheduler.automations import pause_for_connection
 from opa.sdk.contract import ConnectorError
 from opa.core.errors import Conflict, Invalid
@@ -21,13 +20,19 @@ from opa.db.outbox import emit
 router = APIRouter(prefix="/api", tags=["connections"])
 
 Mode = Literal["off", "read_only", "read_write"]
-CAPABILITIES = ("gmail", "calendar")
+
+
+class CapabilityOut(BaseModel):
+    id: str
+    label: str
+    modes: list[str]  # read_write appears only where approval-gated write tools exist
 
 
 class ConnectorOut(BaseModel):
     provider: str
     label: str
     capabilities: list[str]
+    capability_details: list[CapabilityOut]
     available: bool
     reason: str | None = None
 
@@ -45,10 +50,11 @@ class ConnectionOut(BaseModel):
     last_health_at: datetime | None = None
     authorized_at: datetime | None = None
     warning: str | None = None
+    capabilities: list[CapabilityOut] = []
 
 
 class ConnectIn(BaseModel):
-    provider: Literal["fixture", "google"]
+    provider: str
 
 
 class ModesIn(BaseModel):
@@ -61,17 +67,21 @@ def out(c: Connection, settings=None, now: datetime | None = None) -> Connection
     if c.provider == "google" and settings is not None and settings.google_oauth_testing and c.authorized_at and now and c.status == "connected":
         if now >= c.authorized_at + timedelta(days=6):
             warning = "This Google app is in Testing mode, so Google ends access 7 days after sign-in. Reconnect soon to avoid interruption."
-    return ConnectionOut(id=c.id, provider=c.provider, account_label=c.account_label, status=c.status, modes=c.modes,
+    caps = [CapabilityOut(**d) for d in registry.describe(c.provider)] if registry.get(c.provider) else []
+    return ConnectionOut(id=c.id, provider=c.provider, account_label=c.account_label, status=c.status, modes=registry.full_modes(c.provider, c.modes),
                          granted_scopes=c.granted_scopes, version=c.version, is_demo=c.provider == "fixture", last_error=c.last_error,
-                         last_health_at=c.last_health_at, authorized_at=c.authorized_at, warning=warning)
+                         last_health_at=c.last_health_at, authorized_at=c.authorized_at, warning=warning, capabilities=caps)
 
 
 @router.get("/connectors", response_model=list[ConnectorOut])
 async def connectors(owner: OwnerDep, settings: SettingsDep) -> list[ConnectorOut]:
-    reason = google_ready(settings)
-    items = [ConnectorOut(provider="google", label="Google (Gmail and Calendar)", capabilities=list(CAPABILITIES), available=reason is None, reason=reason)]
-    if settings.mode == "demo":
-        items.append(ConnectorOut(provider="fixture", label="Demo account (sample mail and calendar, no real provider)", capabilities=list(CAPABILITIES), available=True))
+    items = []
+    for pid, spec in registry.PROVIDERS.items():
+        if not spec.oauth and settings.mode != "demo":
+            continue  # A20: live mode never offers the demo account
+        reason = registry.ready(settings, pid)
+        items.append(ConnectorOut(provider=pid, label=spec.label, capabilities=spec.capability_ids,
+                                  capability_details=[CapabilityOut(**d) for d in registry.describe(pid)], available=reason is None, reason=reason))
     return items
 
 
@@ -83,12 +93,14 @@ async def list_connections(db: DbDep, owner: OwnerDep, settings: SettingsDep, cl
 
 @router.post("/connections", response_model=ConnectionOut, status_code=201)
 async def connect(body: ConnectIn, db: DbDep, owner: OwnerDep, settings: SettingsDep) -> ConnectionOut:
-    if body.provider == "google":
-        raise Invalid("connect Google through POST /api/connectors/google/authorize", code="use_authorize")
+    if body.provider in registry.OAUTH_PROVIDERS:
+        raise Invalid(f"connect {body.provider} through POST /api/connectors/{body.provider}/authorize", code="use_authorize")
+    if body.provider != "fixture":
+        raise Invalid(f"unknown provider {body.provider}", code="unknown_provider")
     if settings.mode != "demo":
         raise Invalid("demo accounts are only available in demo mode", code="not_configured")
     conn = Connection(owner_id=owner.id, provider="fixture", account_label="demo@example.test", status="connected",
-                      modes={c: "read_only" for c in CAPABILITIES})  # APP-01: read-only by default
+                      modes={c: "read_only" for c in registry.PROVIDERS["fixture"].capability_ids})  # APP-01: read-only by default
     db.add(conn)
     await db.flush()
     await emit(db, owner.id, "connection.connected", {"connection_id": conn.id})
@@ -102,15 +114,18 @@ async def change_modes(connection_id: str, body: ModesIn, db: DbDep, owner: Owne
         raise Conflict("connection is disconnected", code="invalid_state")
     if conn.version != body.expected_version:
         raise Conflict("connection changed; reload and try again", code="version_conflict")
-    unknown = set(body.modes) - set(CAPABILITIES)
+    spec = registry.get(conn.provider)
+    unknown = set(body.modes) - set(spec.capability_ids if spec else ())
     if unknown:
         raise Invalid(f"unknown capabilities: {sorted(unknown)}")
-    if conn.provider == "google":
-        missing = sorted({s for cap, mode in body.modes.items() for s in gscopes.missing_for_mode(cap, mode, conn.granted_scopes)})
-        if missing:
-            # Tool permission is the owner's choice; provider scopes are Google's grant. Ask Google first.
-            raise Conflict("Google has not granted this yet; continue to Google to grant: " + ", ".join(missing), code="scope_required")
-    new = {**conn.modes, **body.modes}
+    for cap, mode in body.modes.items():
+        if mode not in spec.capability(cap).modes:
+            raise Invalid(f"{spec.capability(cap).label} is read-only in this version; there are no approved write actions for it yet", code="mode_not_supported")
+    missing = sorted({s for cap, mode in body.modes.items() for s in registry.missing_scopes(conn.provider, cap, mode, conn.granted_scopes)})
+    if missing:
+        # Tool permission is the owner's choice; provider scopes are the provider's grant. Ask the provider first.
+        raise Conflict(f"{registry.SHORT.get(conn.provider, conn.provider)} has not granted this yet; continue to sign in and grant: " + ", ".join(missing), code="scope_required")
+    new = {**registry.full_modes(conn.provider, conn.modes), **body.modes}
     for cap, mode in body.modes.items():
         if mode != "read_write":
             await invalidate_actions(db, await open_actions_for_connection(db, conn.id, cap, "write"), f"{cap} access was reduced to {mode}", clock, block_code="permission_changed")

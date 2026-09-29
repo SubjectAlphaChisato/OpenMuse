@@ -43,8 +43,11 @@ class BrokerClient:
     async def reconcile(self, action_id: str, owner_id: str) -> dict[str, Any]:
         return await self._post("/internal/reconcile", {"action_id": action_id, "owner_id": owner_id})
 
+    async def oauth_exchange(self, provider: str, **body: Any) -> dict[str, Any]:
+        return await self._post(f"/internal/oauth/{provider}/exchange", body)
+
     async def google_exchange(self, **body: Any) -> dict[str, Any]:
-        return await self._post("/internal/oauth/google/exchange", body)
+        return await self.oauth_exchange("google", **body)
 
     async def revoke(self, connection_id: str, owner_id: str) -> dict[str, Any]:
         return await self._post("/internal/connections/revoke", {"connection_id": connection_id, "owner_id": owner_id})

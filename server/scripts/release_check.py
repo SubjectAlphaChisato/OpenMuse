@@ -77,7 +77,7 @@ def main() -> int:
             print(out[-3000:])
     failed = [r for r in results if r[1] is False]
     print(f"\n{len(results) - len(failed) - len(skip)} passed, {len(failed)} failed, {len(skip)} skipped")
-    print("Manual gates not covered here: A17b VoiceOver pass; Docker Compose build and run; live Google and Claude checks.")
+    print("Manual gates not covered here: A17b VoiceOver pass; Docker Compose build and run; live Google, Notion, GitHub, and Claude checks.")
     return 1 if failed else 0
 
 

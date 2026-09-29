@@ -553,7 +553,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/connectors/google/authorize": {
+    "/api/connectors/{provider}/authorize": {
         parameters: {
             query?: never;
             header?: never;
@@ -563,7 +563,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Authorize */
-        post: operations["authorize_api_connectors_google_authorize_post"];
+        post: operations["authorize_api_connectors__provider__authorize_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1031,16 +1031,10 @@ export interface components {
         AuthorizeIn: {
             /** Connection Id */
             connection_id?: string | null;
-            /**
-             * Modes
-             * @default {
-             *       "calendar": "read_only",
-             *       "gmail": "read_only"
-             *     }
-             */
-            modes: {
+            /** Modes */
+            modes?: {
                 [key: string]: "off" | "read_only" | "read_write";
-            };
+            } | null;
         };
         /** AuthorizeOut */
         AuthorizeOut: {
@@ -1137,13 +1131,19 @@ export interface components {
             /** Connection Id */
             connection_id: string;
         };
+        /** CapabilityOut */
+        CapabilityOut: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Modes */
+            modes: string[];
+        };
         /** ConnectIn */
         ConnectIn: {
-            /**
-             * Provider
-             * @enum {string}
-             */
-            provider: "fixture" | "google";
+            /** Provider */
+            provider: string;
         };
         /** ConnectionOut */
         ConnectionOut: {
@@ -1151,6 +1151,11 @@ export interface components {
             account_label: string;
             /** Authorized At */
             authorized_at?: string | null;
+            /**
+             * Capabilities
+             * @default []
+             */
+            capabilities: components["schemas"]["CapabilityOut"][];
             /** Granted Scopes */
             granted_scopes: string[];
             /** Id */
@@ -1180,6 +1185,8 @@ export interface components {
             available: boolean;
             /** Capabilities */
             capabilities: string[];
+            /** Capability Details */
+            capability_details: components["schemas"]["CapabilityOut"][];
             /** Label */
             label: string;
             /** Provider */
@@ -1263,6 +1270,11 @@ export interface components {
             account_label: string;
             /** Authorized At */
             authorized_at?: string | null;
+            /**
+             * Capabilities
+             * @default []
+             */
+            capabilities: components["schemas"]["CapabilityOut"][];
             /** Granted Scopes */
             granted_scopes: string[];
             /** Id */
@@ -2940,11 +2952,13 @@ export interface operations {
             };
         };
     };
-    authorize_api_connectors_google_authorize_post: {
+    authorize_api_connectors__provider__authorize_post: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                provider: string;
+            };
             cookie?: never;
         };
         requestBody: {
