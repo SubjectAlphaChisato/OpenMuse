@@ -1,0 +1,10 @@
+# M6: isolated browser service. No database credentials, provider credentials, files, or Docker socket.
+FROM python:3.12-slim
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN useradd --create-home --uid 10002 browser
+WORKDIR /app
+COPY server/pyproject.toml ./
+COPY server/opa ./opa
+RUN pip install --no-cache-dir . && python -m playwright install --with-deps --only-shell chromium && chmod -R a+rX /ms-playwright
+USER browser
+CMD ["opa", "browser"]

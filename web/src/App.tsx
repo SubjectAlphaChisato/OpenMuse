@@ -3,10 +3,12 @@ import { api, api2, ApiError, Conversation, Me, Message, Notification, setCsrf, 
 import { Approvals } from "./screens/Approvals";
 import { Connections } from "./screens/Connections";
 import { Automations } from "./screens/Automations"; // M5
+import { Browser } from "./screens/Browser"; // M6
+import { Data } from "./screens/Data"; // M6
 import { ArtifactLinks, Files } from "./screens/Files"; // M4
 import { Memory } from "./screens/Memory"; // M4
 
-type Screen = "chat" | "tasks" | "approvals" | "automations" | "notifications" | "connections" | "files" | "memory";
+type Screen = "chat" | "tasks" | "approvals" | "automations" | "browser" | "notifications" | "connections" | "files" | "memory" | "data";
 
 const STATE_LABEL: Record<TaskState, string> = {
   queued: "Queued", running: "Running", waiting_approval: "Needs approval", waiting_user: "Needs your reply",
@@ -81,7 +83,7 @@ function Shell({ me: initialMe, onLogout }: { me: Me; onLogout: () => void }) {
     if (type === "connection.reauth_required") setLive("A connected account needs reconnecting.");
   }), []);
   useEffect(() => { api2.approvals().then((a) => setPending(a.length)).catch(() => undefined); }, [tick]);
-  const labels: Record<Screen, string> = { chat: "Chat", tasks: "Tasks", approvals: "Approvals", automations: "Automations", notifications: "Notifications", connections: "Connections", files: "Files", memory: "Memory" };
+  const labels: Record<Screen, string> = { chat: "Chat", tasks: "Tasks", approvals: "Approvals", automations: "Automations", browser: "Browser", notifications: "Notifications", connections: "Connections", files: "Files", memory: "Memory", data: "Your data" };
   const [fileFocus, setFileFocus] = useState<string>(""); // M4: open a file from a chat message
 
   return (
@@ -109,6 +111,8 @@ function Shell({ me: initialMe, onLogout }: { me: Me; onLogout: () => void }) {
         {screen === "approvals" && <Approvals tick={tick} announce={setLive} />}
         {screen === "notifications" && <Notifications tick={tick} />}
         {screen === "automations" && <Automations me={me} tick={tick} announce={setLive} />}
+        {screen === "browser" && <Browser tick={tick} announce={setLive} />}
+        {screen === "data" && <Data me={me} tick={tick} announce={setLive} />}
         {screen === "connections" && <Connections me={me} tick={tick} onMe={setMe} announce={setLive} notice={notice} />}
         {screen === "files" && <Files tick={tick} announce={setLive} focusId={fileFocus || undefined} />}
         {screen === "memory" && <Memory tick={tick} announce={setLive} />}

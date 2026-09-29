@@ -73,3 +73,8 @@ label.inline { margin-right: 10px; }
 fieldset { border: 1px solid #ddd; border-radius: 6px; margin: 8px 0; }
 textarea { width: 100%; }
 .link { white-space: nowrap; }
+.live img { max-width: 100%; border: 1px solid #ccc; border-radius: 6px; display: block; margin: 8px 0; }
+.live img.driving { outline: 3px solid #b3261e; cursor: crosshair; }
+.url { word-break: break-all; }
+.card.danger { border-left: 4px solid #b3261e; }
+.top nav { flex-wrap: wrap; }

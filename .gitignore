@@ -11,3 +11,4 @@ web/dist/
 .ruff_cache/
 .mcp.json
 *.tsbuildinfo
+backups/

@@ -21,7 +21,7 @@ from playwright.sync_api import expect, sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
 DIST = ROOT.parent / "web" / "dist"
-EMAIL, PASSWORD, PORT, BROKER_PORT = "ui@example.com", "ui-smoke-password-123", 8098, 8097
+EMAIL, PASSWORD, PORT, BROKER_PORT, BROWSER_PORT, WEB_PROXY_PORT = "ui@example.com", "ui-smoke-password-123", 8098, 8097, 8096, 3139
 SCRIPT = """
 match:
   - contains: "Email Priya"
@@ -30,6 +30,15 @@ match:
           - name: gmail__send_message
             input: {connection_id: "@auto", to: [priya@partner.example], cc: [], bcc: [], subject: Metrics for Thursday, body: "Hi Priya, here are the metrics.", in_reply_to_message_id: null}
       - text: Sent the email to Priya.
+  - contains: "Research Wren"
+    steps:
+      - tool_calls:
+          - name: browser__navigate
+            input: {url: "@site", tab_id: null}
+      - tool_calls:
+          - name: ask_user
+            input: {question: "I found the protocol page. Keep going?"}
+      - text: "The Wren protocol was published in 2024."
 default: {text: "OK. (scripted model)"}
 """
 
@@ -49,16 +58,25 @@ def main() -> int:
     script_path.write_text(SCRIPT)
     env = dict(os.environ, OPA_DATABASE_URL=url, OPA_BIND_PORT=str(PORT), OPA_MODE="demo", OPA_MODEL_PROVIDER="scripted",
                OPA_WEB_DIST_DIR=str(DIST), OPA_INTERNAL_TOKEN="smoke-internal-token", OPA_BROKER_URL=f"http://127.0.0.1:{BROKER_PORT}",
-               OPA_BROKER_BIND_PORT=str(BROKER_PORT), OPA_SCRIPTED_MODEL_PATH=str(script_path))
+               OPA_BROKER_BIND_PORT=str(BROKER_PORT), OPA_SCRIPTED_MODEL_PATH=str(script_path),
+               OPA_BROWSER_URL=f"http://127.0.0.1:{BROWSER_PORT}", OPA_BROWSER_BIND_PORT=str(BROWSER_PORT),
+               OPA_WEB_PROXY_URL=f"http://127.0.0.1:{WEB_PROXY_PORT}", OPA_EXPORT_DIR=str(Path(pgdir) / "exports"),
+               OPA_ARTIFACT_DIR=str(Path(pgdir) / "artifacts"))
+    site_port = _start_site()
+    script_path.write_text(SCRIPT.replace("@site", f"http://site.test:{site_port}/"))
     procs: list[subprocess.Popen] = []
     try:
         subprocess.run([str(ROOT / ".venv/bin/opa"), "migrate"], env=env, check=True, capture_output=True)
         subprocess.run([str(ROOT / ".venv/bin/python"), "-c", _BOOTSTRAP], env=env, check=True)
         procs.append(subprocess.Popen([str(ROOT / ".venv/bin/opa"), "api"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
         procs.append(subprocess.Popen([str(ROOT / ".venv/bin/opa"), "broker"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+        procs.append(subprocess.Popen([str(ROOT / ".venv/bin/opa"), "proxy", "--policy", "public-web", "--listen", f"127.0.0.1:{WEB_PROXY_PORT}",
+                                       "--fixture-host", f"site.test=127.0.0.1:{site_port}"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+        procs.append(subprocess.Popen([str(ROOT / ".venv/bin/opa"), "browser"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
         procs.append(subprocess.Popen([str(ROOT / ".venv/bin/opa"), "worker"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
         _wait_http(f"http://127.0.0.1:{PORT}/healthz")
         _wait_http(f"http://127.0.0.1:{BROKER_PORT}/internal/health")
+        _wait_http(f"http://127.0.0.1:{BROWSER_PORT}/internal/health", timeout=40)
         return _drive(f"http://127.0.0.1:{PORT}", args.screenshots or tempfile.mkdtemp(prefix="opa-ui-fail-"))
     finally:
         for p in procs:
@@ -147,6 +165,7 @@ def _drive(base: str, shots: str | None) -> int:
         try:
             _m2(page, snap)
             _m5(page, snap)
+            _m6(page, snap)
         except Exception:
             snap(page, "FAILED")
             print("FAIL screenshot saved to", shots)
@@ -228,6 +247,73 @@ def _m5(page, snap) -> None:
     card.get_by_role("button", name="Delete").click()
     expect(page.get_by_text("No automations yet.")).to_be_visible()
     print("PASS automation turned off and deleted")
+
+
+def _start_site() -> int:
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    class H(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            body = b"<html><head><title>Wren protocol</title></head><body><h1>The Wren protocol</h1><p>Published in 2024.</p></body></html>"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    return httpd.server_address[1]
+
+
+def _m6(page, snap) -> None:
+    # ---- M6: the agent browses; the owner watches live, takes control, hands back, stops
+    page.get_by_role("button", name="Chat").click()
+    expect(page.get_by_role("button", name="Send")).to_be_enabled()
+    page.get_by_role("textbox", name="Message").fill("Research Wren")
+    page.keyboard.press("Enter")
+    expect(page.get_by_text("I found the protocol page. Keep going?")).to_be_visible(timeout=30_000)
+    page.get_by_role("button", name="Browser").click()
+    card = page.get_by_role("article", name="Browser for Research Wren")
+    expect(card).to_be_visible()
+    card.get_by_role("button", name="Show live view").click()
+    live = card.get_by_role("img", name="Live view of the assistant's browser", exact=False)
+    expect(live).to_be_visible(timeout=15_000)
+    card.get_by_text("Pages visited (1)").click()
+    expect(card.get_by_text("Wren protocol —", exact=False)).to_be_visible()
+    print("PASS agent browsed a public page; live view streams frames; visited pages listed")
+    snap(page, "10-browser-live")
+    card.get_by_role("button", name="Take control").click()
+    expect(card.get_by_text("You are in control. The assistant is paused.")).to_be_visible()
+    card.get_by_role("button", name="Scroll down").click()
+    card.get_by_role("button", name="Resume").click()
+    expect(card.get_by_text("The assistant is in control.")).to_be_visible()
+    print("PASS take control and explicit resume from the UI")
+    card.get_by_role("button", name="Stop").click()
+    expect(page.get_by_text("No browser is open.")).to_be_visible()
+    print("PASS stop closes the browser")
+
+    # ---- M6: export, then delete all data behind a typed confirmation
+    page.get_by_role("button", name="Your data").click()
+    page.get_by_role("button", name="Create export").click()
+    link = page.get_by_role("link", name="opa-export-", exact=False).first
+    expect(link).to_be_visible()
+    with page.expect_download() as dl:
+        link.click()
+    assert dl.value.suggested_filename.startswith("opa-export-")
+    print("PASS export created and downloaded")
+    delete = page.get_by_role("button", name="Delete all data")
+    expect(delete).to_be_disabled()
+    page.get_by_label("Type your email address", exact=False).fill(EMAIL)
+    expect(delete).to_be_enabled()
+    delete.click()
+    expect(page.get_by_role("status").filter(has_text="Backups made before now")).to_be_visible(timeout=15_000)
+    snap(page, "11-data-deleted")
+    print("PASS delete-all needs the typed email and reports what happened")
 
 
 if __name__ == "__main__":

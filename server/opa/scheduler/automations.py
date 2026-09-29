@@ -172,6 +172,10 @@ class AutomationService:
         a = await self.get(owner.id, automation_id, lock=True)
         self._check_version(a, expected_version)
         enabled = changes.pop("enabled", None)
+        if changes.pop("resume", None) and a.paused_reason == "restored":
+            a.paused_reason = None
+            a.next_run_at = self._first_run(a)  # runs missed while paused are not replayed
+            await emit(self.db, owner.id, "automation.resumed", {"automation_id": a.id})
         if changes:
             merged = self._spec_of(a).model_dump() | changes
             n = await self.normalize(owner, AutomationIn(**merged))

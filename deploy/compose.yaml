@@ -53,12 +53,14 @@ services:
       OPA_WEB_DIST_DIR: /web
       OPA_GOOGLE_CLIENT_ID: ${OPA_GOOGLE_CLIENT_ID:-}        # the api builds the consent URL; it never sees the secret
       OPA_GOOGLE_REDIRECT_URI: ${OPA_GOOGLE_REDIRECT_URI:-http://127.0.0.1:8080/api/oauth/google/callback}
+      OPA_BROWSER_URL: http://browser:8082   # M6: live view, takeover, stop
+      OPA_EXPORT_DIR: /data/exports
     ports: ["127.0.0.1:8080:8080"]   # localhost only (AUTH-01); see README for HTTPS
-    volumes: [webdist:/web:ro, artifacts:/data/artifacts]
+    volumes: [webdist:/web:ro, artifacts:/data/artifacts, exports:/data/exports]
     depends_on:
       migrate: { condition: service_completed_successfully }
       web-build: { condition: service_completed_successfully }
-    networks: [internal, frontend]
+    networks: [internal, frontend, browser-control]
 
   worker:
     build: { context: .., dockerfile: deploy/Dockerfile.server }
@@ -67,9 +69,10 @@ services:
     environment:
       <<: [*app-db, *internal]
       OPA_MODEL_PROXY: http://egress-proxy:3128
+      OPA_BROWSER_URL: http://browser:8082   # M6: the agent's browser tools
     volumes: [artifacts:/data/artifacts]
     depends_on: { migrate: { condition: service_completed_successfully } }
-    networks: [internal, model-egress]   # no route to the internet except through egress-proxy
+    networks: [internal, model-egress, browser-control]   # no route to the internet except through egress-proxy
 
   scheduler:
     # M5: schedules, calendar-change polling (through the broker), held runs, hourly file clean-up.
@@ -98,6 +101,40 @@ services:
     depends_on: { migrate: { condition: service_completed_successfully } }
     networks: [internal, provider-egress]
 
+  browser:
+    # M6 (WEB-01): Chromium whose only route out is web-proxy. It shares a network with api and worker only,
+    # never with postgres or the broker, and mounts no volumes or secrets besides the internal token.
+    build: { context: .., dockerfile: deploy/Dockerfile.browser }
+    command: ["opa", "browser"]
+    environment:
+      OPA_INTERNAL_TOKEN: ${OPA_INTERNAL_TOKEN:?}
+      OPA_WEB_PROXY_URL: http://web-proxy:3129
+      OPA_BIND_HOST: 0.0.0.0
+    shm_size: 1gb
+    read_only: true
+    tmpfs: [/tmp, /home/browser]
+    security_opt: ["no-new-privileges:true"]
+    networks: [browser-control, web-egress]
+
+  web-proxy:
+    # M6: public-web policy. Resolves every name itself and refuses private, local, and reserved addresses,
+    # for every connection and redirect.
+    build: { context: .., dockerfile: deploy/Dockerfile.server }
+    command: ["opa", "proxy", "--policy", "public-web", "--listen", "0.0.0.0:3129"]
+    networks: [web-egress, outbound]
+
+  ops:
+    # M6 (DATA-01): backup and restore run here with the database owner role. Not started by `up`.
+    profiles: ["ops"]
+    build: { context: .., dockerfile: deploy/Dockerfile.server }
+    environment:
+      OPA_DATABASE_URL: postgresql+asyncpg://opa:${OPA_DB_PASSWORD}@postgres:5432/opa
+      OPA_ARTIFACT_DIR: /data/artifacts
+      OPA_APP_DB_PASSWORD: ${OPA_APP_DB_PASSWORD:?}
+      OPA_BROKER_DB_PASSWORD: ${OPA_BROKER_DB_PASSWORD:?}
+    volumes: [artifacts:/data/artifacts, ../backups:/backups]
+    networks: [internal]
+
   egress-proxy:
     build: { context: .., dockerfile: deploy/Dockerfile.server }
     command: ["opa", "proxy", "--listen", "0.0.0.0:3128", "--allow", "api.anthropic.com:443"]
@@ -108,9 +145,12 @@ networks:
   model-egress: { internal: true }
   frontend: {}          # published port; the api is the only member
   provider-egress: {}   # broker's route to provider APIs
-  outbound: {}          # egress-proxy's route to the model host
+  outbound: {}          # egress-proxy's and web-proxy's route out
+  browser-control: { internal: true }   # api/worker <-> browser only
+  web-egress: { internal: true }        # browser <-> web-proxy only
 
 volumes:
   pgdata: {}
   webdist: {}
   artifacts: {}
+  exports: {}

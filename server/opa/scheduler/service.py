@@ -33,7 +33,8 @@ log = logging.getLogger("opa.scheduler")
 RESUMABLE = ("reauth_required", "connection_error")
 PAUSE_TEXT = {"connection_disconnected": "an account it uses was disconnected; edit it to choose another account",
               "reauth_required": "an account it uses needs reconnecting",
-              "connection_error": "an account it uses has an error"}
+              "connection_error": "an account it uses has an error",
+              "restored": "the service was restored from a backup; resume it in Automations if you still want it"}
 
 
 class Scheduler:
@@ -82,7 +83,7 @@ class Scheduler:
         slots = timing.slots_through(sched, a.next_run_at, now)
         latest, missed = slots[-1], len(slots) - 1
         late = missed > 0 or (now - latest) > timedelta(seconds=self.settings.schedule_grace_seconds)
-        problem = await AutomationService(db, self.settings, self.clock).connection_problem(a)
+        problem = "restored" if a.paused_reason == "restored" else await AutomationService(db, self.settings, self.clock).connection_problem(a)
         if problem:
             await self._pause(db, a, problem)
             await self._record(db, a, latest, "missed_paused", late=late, missed=missed, detail={"reason": problem})
@@ -224,7 +225,7 @@ class Scheduler:
         cfg = a.trigger
         a.next_run_at = now + timedelta(seconds=cfg.get("poll_seconds", self.settings.trigger_poll_seconds))
         st = dict(a.trigger_state or {})
-        problem = await AutomationService(db, self.settings, self.clock).connection_problem(a)
+        problem = "restored" if a.paused_reason == "restored" else await AutomationService(db, self.settings, self.clock).connection_problem(a)
         if problem:
             await self._pause(db, a, problem)
             return

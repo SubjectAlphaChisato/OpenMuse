@@ -259,7 +259,8 @@ class Action(Base):
     owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
     task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True)
     tool_use_id: Mapped[str] = mapped_column(String(128), nullable=False)
-    connection_id: Mapped[str] = mapped_column(ForeignKey("connections.id", ondelete="CASCADE"), nullable=False)
+    # null for actions that need no provider account, e.g. a browser navigation that would share private data (M6)
+    connection_id: Mapped[str | None] = mapped_column(ForeignKey("connections.id", ondelete="CASCADE"), nullable=True)
     tool_name: Mapped[str] = mapped_column(String(96), nullable=False)
     tool_version: Mapped[str] = mapped_column(String(16), nullable=False)
     effect: Mapped[str] = mapped_column(String(8), nullable=False)
@@ -461,3 +462,33 @@ class ProviderEvent(Base):
     automation_id: Mapped[str | None] = mapped_column(String(26))
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+# ---------------------------------------------------------------- M6: browser sessions, exports (WEB-01, DATA-01)
+
+
+class BrowserSession(Base):
+    __tablename__ = "browser_sessions"
+    id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    task_id: Mapped[str | None] = mapped_column(String(26), index=True)
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="active")  # active | stopped
+    control: Mapped[str] = mapped_column(String(8), nullable=False, default="agent")  # agent | user
+    stopped_by_owner: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    current_url: Mapped[str | None] = mapped_column(Text)
+    urls_visited: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = ts_col()
+    updated_at: Mapped[datetime] = ts_col(onupdate=func.now())
+
+
+class Export(Base):
+    __tablename__ = "exports"
+    id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    file_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    counts: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = ts_col()

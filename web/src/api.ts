@@ -75,7 +75,7 @@ export function subscribe(onEvent: (type: string) => void): () => void {
   const es = new EventSource("/api/events", { withCredentials: true });
   const handler = (e: MessageEvent) => onEvent((e as MessageEvent & { type: string }).type);
   const types = ["task.queued", "task.running", "task.waiting_user", "task.waiting_approval", "task.blocked", "approval.requested", "approval.decided",
-    "automation.created", "automation.confirmed", "automation.updated", "automation.deleted", "automation.run", "automation.paused", "automation.resumed", "automation.held", "automation.catch_up",
+    "browser.session_started", "browser.control", "browser.stopped", "automation.created", "automation.confirmed", "automation.updated", "automation.deleted", "automation.run", "automation.paused", "automation.resumed", "automation.held", "automation.catch_up",
     "action.succeeded", "action.failed", "action.unknown", "action.cancelled", "connection.updated", "connection.disconnected", "connection.connected", "connection.reauth_required",
     "task.succeeded", "task.failed", "task.cancelled", "message.created", "conversation.deleted"];
   types.push("artifact.created", "artifact.updated", "artifact.deleted", "memory.updated"); // M4
@@ -150,3 +150,32 @@ export const automationsApi = {
   setEnabled: (a: Automation, enabled: boolean) => req<Automation>("PATCH", `/api/automations/${a.id}`, { expected_version: a.version, enabled }),
   remove: (a: Automation) => req<void>("DELETE", `/api/automations/${a.id}`),
 };
+
+// ---------------------------------------------------------------- M6: browser, export, delete-all
+
+export interface BrowserSession {
+  id: string; task_id: string | null; task_intent: string | null; state: string; control: "agent" | "user";
+  current_url: string | null; urls_visited: { url: string; at: string; tab_id: string | null; blocked: boolean; title: string }[];
+  version: number; created_at: string; ended_at: string | null;
+}
+export interface ExportInfo { id: string; file_name: string; size: number; sha256: string; counts: Record<string, number>; created_at: string }
+
+export const browserApi = {
+  list: () => req<BrowserSession[]>("GET", "/api/browser-sessions"),
+  takeover: (id: string) => req<BrowserSession>("POST", `/api/browser-sessions/${id}/takeover`),
+  resume: (id: string) => req<BrowserSession>("POST", `/api/browser-sessions/${id}/resume`),
+  stop: (id: string) => req<BrowserSession>("POST", `/api/browser-sessions/${id}/stop`),
+  input: (id: string, event: Record<string, unknown>) => req<{ ok: boolean }>("POST", `/api/browser-sessions/${id}/input`, event),
+  streamUrl: (id: string) => `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/browser-sessions/${id}/stream`,
+};
+
+export const dataApi = {
+  exports: () => req<ExportInfo[]>("GET", "/api/exports"),
+  createExport: () => req<ExportInfo>("POST", "/api/export"),
+  downloadUrl: (e: ExportInfo) => `/api/exports/${e.id}/download`,
+  deleteAll: (confirm: string) => req<{ deleted: Record<string, number>; revocations: { account: string; revoked: boolean; error: string | null }[]; backup_note: string }>(
+    "POST", "/api/delete-all", { confirm }),
+};
+
+export const automationResume = (a: { id: string; version: number }) =>
+  req<unknown>("PATCH", `/api/automations/${a.id}`, { expected_version: a.version, resume: true });

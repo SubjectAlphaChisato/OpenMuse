@@ -74,6 +74,13 @@ class Settings(BaseSettings):
     trigger_window_hours: int = 48
     gc_interval_minutes: int = 60
 
+    # M6: browser service and data controls
+    browser_url: str | None = None  # e.g. http://browser:8082; unset disables browser tools
+    browser_bind_port: int = 8082
+    web_proxy_url: str = "http://127.0.0.1:3129"  # the browser's only route out (public-web policy)
+    export_dir: str = "./data/exports"
+    pg_bin_dir: str | None = None  # where pg_dump/pg_restore live, if not on PATH
+
     @property
     def sync_database_url(self) -> str:
         return self.database_url.replace("+asyncpg", "+psycopg")

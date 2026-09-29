@@ -34,6 +34,7 @@ class PatchIn(BaseModel):
     run_date: str | None = None
     connection_ids: list[str] | None = None
     enabled: bool | None = None
+    resume: bool | None = None  # clears a pause after a restore from backup
 
 
 class OccurrenceOut(BaseModel):

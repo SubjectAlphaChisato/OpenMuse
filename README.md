@@ -2,7 +2,7 @@
 
 A self-hostable personal agent: persistent chat, durable background tasks, and (in later milestones) Gmail and Google Calendar connectors with enforced human approval for every external write.
 
-**Status: milestones M1 to M5 of six.** See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md). Chat, background tasks, approvals, Gmail and Google Calendar (live verification pending), files, memory, schedules, and calendar-change triggers work; a built-in demo account works without any credentials. The restricted browser, export and delete-all, backup and restore, and release packaging are M6.
+**Status: all six milestones implemented; release gates pending.** See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md). Chat, background tasks, approvals, Gmail and Google Calendar (live verification pending), files, memory, schedules, calendar-change triggers, a restricted public-web browser, export, delete-all, and backup and restore work; a built-in demo account works without any credentials. Still open before a release: the accessibility gates (A17), a fresh Docker Compose install, and live Google and Claude checks.
 
 - Requirements: [docs/open-muse-implementation-requirements.md](docs/open-muse-implementation-requirements.md)
 - Technical design: [docs/tech-design.md](docs/tech-design.md)
@@ -25,6 +25,13 @@ OPA_WEB_DIST_DIR=../web/dist .venv/bin/opa api    # http://127.0.0.1:8080
 .venv/bin/opa broker                               # second terminal, port 8081
 .venv/bin/opa worker                               # third terminal
 .venv/bin/opa scheduler                            # fourth terminal: schedules and calendar-change triggers
+.venv/bin/opa proxy --policy public-web --listen 127.0.0.1:3129   # fifth: the browser's only route out
+OPA_WEB_PROXY_URL=http://127.0.0.1:3129 .venv/bin/opa browser    # sixth: isolated Chromium (port 8082)
+```
+
+Give the api and worker `OPA_BROWSER_URL=http://127.0.0.1:8082` to enable browsing. Chromium comes from `.venv/bin/playwright install chromium`.
+
+```sh
 ```
 
 In the app, open Connections and connect the demo account to try approvals without any external service. Accounts start read only; switch Gmail or Calendar to “Read and propose changes” to let the assistant propose writes, which always wait for your approval.
@@ -76,9 +83,38 @@ cd server && .venv/bin/python -m pytest          # unit + acceptance, embedded P
 .venv/bin/python scripts/ui_smoke.py             # real processes + headless Chromium (build web first)
 ```
 
-## Not yet documented
+## The browser
 
-Backup, restore, and teardown arrive with milestone M6.
+The assistant can read public web pages through an isolated Chromium. It cannot sign in, submit forms, upload, download, buy anything, or reach private or local networks: every connection, redirect, image, script, and websocket goes through a proxy that resolves the address itself and refuses private, loopback, link-local, and cloud-metadata addresses. If a page address would carry your private data (text from your email, calendar, files, or memory), the assistant asks for your approval first and shows exactly what would be shared. Open **Browser** to watch live, **Take control** (the assistant pauses), **Resume** (cookies and site data from your turn are cleared first), or **Stop**.
+
+## Your data
+
+**Your data** has **Create export** (a ZIP of everything you created, with a JSON Schema for each file; no passwords, tokens, or credentials) and **Delete all data** (type your email address to confirm). Delete-all cancels running work, disconnects and revokes accounts, and removes your data and files; your sign-in stays. Backups taken earlier still contain your data until you delete them.
+
+## Backup, restore, and teardown
+
+Backups need the PostgreSQL 16 client tools (`pg_dump`, `pg_restore`); set `OPA_PG_BIN_DIR` if they are not on `PATH`. Run them with the database **owner** role.
+
+```sh
+# local
+OPA_DATABASE_URL=postgresql+asyncpg://OWNER:PASS@localhost:5432/opa .venv/bin/opa backup /path/to/backups/2026-10-01
+# Compose (writes to ./backups on the host)
+docker compose --env-file .env -f deploy/compose.yaml --profile ops run --rm ops opa backup /backups/2026-10-01
+```
+
+A backup is a directory with `app.dump` (the database), `artifacts.tar.gz` (your files), and `manifest.json` (SHA-256 of each). Add `--broker` to also dump the encrypted account credentials to `broker.dump`; they are useless without `OPA_BROKER_KEK`, which you must back up separately and never store with the backup.
+
+To restore, point the commands at an **empty** database and an **empty** artifact directory:
+
+```sh
+OPA_DATABASE_URL=postgresql+asyncpg://OWNER:PASS@localhost:5432/opa_restored OPA_ARTIFACT_DIR=/new/artifacts \
+  .venv/bin/opa restore /path/to/backups/2026-10-01
+.venv/bin/opa db-roles    # re-create role grants on the restored database
+```
+
+Restore verifies every file against the manifest first. Afterwards nothing resumes on its own: automations are paused (resume each in **Automations**), pending approvals are cancelled, a write that was in flight during the backup is marked "outcome unknown" for you to check, and interrupted tasks are blocked for review.
+
+Teardown: `docker compose -f deploy/compose.yaml down` stops everything and keeps your data volumes; `down -v` also deletes the database, files, and exports permanently. Take a backup first if you might need them.
 
 ## License
 

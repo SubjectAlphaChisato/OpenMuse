@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from sqlalchemy import select
 
 from opa.api.actions_service import invalidate_actions, open_actions_for_task
@@ -11,6 +11,20 @@ from opa.core.errors import Conflict
 from opa.db.models import TERMINAL_STATES, Action, Conversation, Task
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
+
+
+async def stop_task_browsers(request: Request, db, task_id: str, clock) -> None:
+    """TASK-02: cancelling a task ends its browser sessions immediately."""
+    from opa.db.models import BrowserSession
+
+    rows = list(await db.scalars(select(BrowserSession).where(BrowserSession.task_id == task_id, BrowserSession.state == "active")))
+    for s in rows:
+        s.state, s.ended_at = "stopped", clock.now()
+        if request.app.state.browser is not None:
+            try:
+                await request.app.state.browser.stop(s.id)
+            except Exception:  # noqa: BLE001 - the session is closed in the database either way
+                pass
 
 
 def to_out(t: Task) -> TaskOut:
@@ -42,12 +56,13 @@ async def get_task(task_id: str, db: DbDep, owner: OwnerDep) -> TaskOut:
 
 
 @router.post("/{task_id}/cancel", response_model=TaskOut)
-async def cancel_task(task_id: str, db: DbDep, owner: OwnerDep, clock: ClockDep) -> TaskOut:
+async def cancel_task(task_id: str, request: Request, db: DbDep, owner: OwnerDep, clock: ClockDep) -> TaskOut:
     task = await get_owned(db, Task, task_id, owner)
     if task.state in TERMINAL_STATES:
         raise Conflict("task already finished", code="invalid_state")
     await invalidate_actions(db, await open_actions_for_task(db, task.id), "the task was cancelled", clock)
     await transition(db, task, "cancelled", clock)
+    await stop_task_browsers(request, db, task.id, clock)
     return to_out(task)
 
 

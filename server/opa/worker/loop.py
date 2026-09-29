@@ -60,7 +60,7 @@ def _result_text(status: str, data: Any = None, error: dict | None = None) -> st
 
 class Worker:
     def __init__(self, settings: Settings, sessionmaker: async_sessionmaker[AsyncSession], model: ModelAdapter,
-                 clock: Clock | None = None, name: str | None = None, broker: BrokerClient | None = None) -> None:
+                 clock: Clock | None = None, name: str | None = None, broker: BrokerClient | None = None, browser=None) -> None:
         self.settings = settings
         self.sm = sessionmaker
         self.model = model
@@ -71,6 +71,9 @@ class Worker:
         self._lost = False
         self.tools = LocalTools()
         self.outputs = OutputTools(settings, sessionmaker, self.clock)  # M4: artifact and memory tools
+        from opa.worker.browser_tools import BrowserTools
+
+        self.browser_tools = BrowserTools(sessionmaker, self.clock, browser)  # M6: restricted public browsing
 
     # ---------- lifecycle ----------
     def stop(self) -> None:
@@ -182,6 +185,7 @@ class Worker:
             task.injected_memory_ids = memory.ids
             task.checkpoint = {**task.checkpoint, "injected_memory_ids": memory.ids}
             system = SYSTEM_PROMPT + (f"\n\n{memory.block}" if memory.block else "")
+            state["memory_block"] = memory.block or ""
 
         broker_tools: dict[str, dict[str, Any]] = {}
         if self.broker is not None:
@@ -190,7 +194,7 @@ class Worker:
                     broker_tools[t["name"]] = t
             except (BrokerUnavailable, ConnectorError) as e:
                 log.warning("broker tools unavailable: %s", e)
-        tool_defs = self.tools.definitions() + self.outputs.definitions() + [{"name": t["name"], "description": t["description"], "input_schema": t["input_schema"]} for t in broker_tools.values()]
+        tool_defs = self.tools.definitions() + self.outputs.definitions() + self.browser_tools.definitions() + [{"name": t["name"], "description": t["description"], "input_schema": t["input_schema"]} for t in broker_tools.values()]
 
         try:
             if pending:
@@ -234,8 +238,25 @@ class Worker:
                 results: list[dict[str, Any]] = []
                 ask_user: str | None = None
                 proposal: tuple[Any, dict[str, Any]] | None = None
+                browser_paused = False
                 for call in result.tool_calls:
                     usage["tool_dispatches"] = usage.get("tool_dispatches", 0) + 1
+                    if call.name in self.browser_tools.names:
+                        outcome = await self.browser_tools.execute(call.name, dict(call.input), owner_id=state["owner_id"], task_id=task_id, token=token,
+                                                                   messages=messages, memory_block=state.get("memory_block", ""))
+                        if outcome.get("paused"):
+                            browser_paused = True
+                            results.append(self._err(call.id, "paused", "the owner has taken control of the browser; this task waits until they resume"))
+                        elif outcome.get("proposal"):
+                            if proposal is not None:
+                                results.append(self._err(call.id, "invalid_input", "only one approval can be requested at a time; propose this again after the first is decided"))
+                            else:
+                                proposal = (call, outcome["proposal"])
+                        else:
+                            if outcome.get("output_key"):
+                                outputs[outcome["output_key"]] = {"value": outcome.get("output_value"), "confirmed": outcome.get("ok", False)}
+                            results.append({"type": "tool_result", "tool_use_id": call.id, "content": outcome["content"], "is_error": not outcome.get("ok", False)})
+                        continue
                     if call.name == "ask_user":
                         ask_user = str(call.input.get("question", "")) or "Could you clarify?"
                         results.append({"type": "tool_result", "tool_use_id": call.id, "content": "question delivered to the owner; wait for the reply"})
@@ -280,6 +301,10 @@ class Worker:
                     await self._propose(task_id, token, state, proposal[0], proposal[1], results)
                     return
                 messages.append({"role": "user", "content": results})
+                if browser_paused:
+                    await self._checkpoint(task_id, token, state, ask_user="Paused while you control the browser. Choose Resume in Browser when you are done.",
+                                           extra={"waiting_for": "browser_resume"})
+                    return
                 if ask_user:
                     await self._checkpoint(task_id, token, state, ask_user=ask_user)
                     return
@@ -319,6 +344,8 @@ class Worker:
         tid = pending["tool_use_id"]
         async with self.sm() as db:
             action = await db.get(Action, pending["action_id"])
+        if action.state == "approved" and action.tool_name.startswith("browser."):
+            return await self._dispatch_browser(action, tid, task_id, token, usage)
         if action.state == "approved":
             if self.broker is None:
                 raise Blocked("broker_unavailable", "no connector service is configured")
@@ -350,6 +377,34 @@ class Worker:
         code = {"denied": "permission_denied", "expired": "approval_required", "cancelled": "approval_required"}.get(action.state, (action.error or {}).get("code", "provider_unavailable"))
         return self._err(tid, code, messages.get(action.state, action.state))
 
+    async def _dispatch_browser(self, action: Action, tid: str, task_id: str, token: str, usage: dict[str, Any]) -> dict[str, Any]:
+        """An approved data-sharing navigation. Claimed once (approved -> dispatching), then performed exactly as approved."""
+        from opa.browser.client import BrowserCommandError, BrowserUnavailable
+        from opa.core.canonical import args_hash
+
+        async with self.sm() as db, db.begin():
+            await self._fenced(db, task_id, token)
+            claimed = await db.execute(update(Action).where(Action.id == action.id, Action.state == "approved").values(
+                state="dispatching", dispatch_started_at=self.clock.now(), lease_token_at_dispatch=token))
+            if claimed.rowcount != 1:
+                raise Blocked("unknown_external_outcome", "this navigation was already started; check it before resuming")
+            if args_hash(action.tool_name, action.tool_version, action.canonical_args) != action.args_hash:
+                await db.execute(update(Action).where(Action.id == action.id).values(state="cancelled", error={"code": "approval_required", "message": "the address changed after approval"}))
+                return self._err(tid, "approval_required", "the address changed after approval; a new approval is required")
+        usage["tool_dispatches"] = usage.get("tool_dispatches", 0) + 1
+        try:
+            outcome = await self.browser_tools.dispatch_approved(action.canonical_args, owner_id=action.owner_id, task_id=task_id, token=token)
+            state, err = ("succeeded", None) if outcome.get("ok") else ("failed", json.loads(outcome["content"]).get("error"))
+        except (BrowserCommandError, BrowserUnavailable) as e:
+            outcome, state, err = None, "failed", {"code": getattr(e, "code", "provider_unavailable"), "message": str(e)}
+        async with self.sm() as db, db.begin():
+            await db.execute(update(Action).where(Action.id == action.id).values(state=state, error=err, dispatch_finished_at=self.clock.now(),
+                                                                                 provider_refs=[f"web:{action.canonical_args['url']}"] if state == "succeeded" else []))
+            await emit(db, action.owner_id, f"action.{state}", {"tool": action.tool_name}, task_id=task_id, action_id=action.id)
+        if outcome is None or state == "failed":
+            return self._err(tid, (err or {}).get("code", "provider_unavailable"), (err or {}).get("message", "navigation failed"))
+        return {"type": "tool_result", "tool_use_id": tid, "content": outcome["content"]}
+
     # ---------- persistence ----------
     def _apply_checkpoint(self, task: Task, state: dict[str, Any], *, clear_pending: bool = False, extra: dict[str, Any] | None = None) -> None:
         ck = {k: v for k, v in task.checkpoint.items() if k != "pending_user_reply"}
@@ -364,11 +419,15 @@ class Worker:
         state["started"] = time.monotonic()
         task.last_activity_at = self.clock.now()
 
-    async def _checkpoint(self, task_id: str, token: str, state: dict[str, Any], *, clear_pending: bool = False, ask_user: str | None = None) -> None:
+    async def _checkpoint(self, task_id: str, token: str, state: dict[str, Any], *, clear_pending: bool = False, ask_user: str | None = None,
+                          extra: dict[str, Any] | None = None) -> None:
         async with self.sm() as db, db.begin():
             await self._fenced(db, task_id, token)
             task = await db.get(Task, task_id)
-            self._apply_checkpoint(task, state, clear_pending=clear_pending)
+            ck_extra = dict(extra or {})
+            if "waiting_for" not in ck_extra and task.checkpoint.get("waiting_for"):
+                ck_extra["waiting_for"] = None
+            self._apply_checkpoint(task, state, clear_pending=clear_pending, extra=ck_extra or None)
             task.current_step = f"after model call {state['usage'].get('model_calls', 0)}"
             if ask_user:
                 conv = await db.get(Conversation, task.conversation_id)
@@ -391,6 +450,8 @@ class Worker:
                 await transition(db, task, "blocked", self.clock, blocker_code="unknown_external_outcome", blocker_detail="an external change has an unknown outcome")
                 return
             await transition(db, task, "succeeded", self.clock, notify=("Task completed", task.intent[:120]))
+        if self.browser_tools.client:
+            await self.browser_tools.stop_for_task(task_id)  # the task is done; free its browser
 
     async def _block(self, task_id: str, token: str, state: dict[str, Any], code: str, detail: str) -> None:
         async with self.sm() as db, db.begin():

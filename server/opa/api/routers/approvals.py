@@ -65,9 +65,9 @@ class ResolveIn(BaseModel):
 async def _out(db, ap: Approval) -> ApprovalOut:
     action = await db.get(Action, ap.action_id)
     task = await db.get(Task, ap.task_id)
-    conn = await db.get(Connection, action.connection_id)
+    conn = await db.get(Connection, action.connection_id) if action.connection_id else None
     return ApprovalOut(id=ap.id, state=ap.state, expires_at=ap.expires_at, decided_at=ap.decided_at, reason=ap.reason, args_hash=ap.args_hash,
-                       action_id=action.id, action_state=action.state, task_id=task.id, task_intent=task.intent, account=conn.account_label,
+                       action_id=action.id, action_state=action.state, task_id=task.id, task_intent=task.intent, account=conn.account_label if conn else "Web browser",
                        preview=action.preview, effect=action.effect)
 
 
@@ -127,11 +127,12 @@ async def decide(approval_id: str, body: DecisionIn, db: DbDep, owner: OwnerDep,
         await transition(db, task, "blocked", clock, blocker_code="approval_denied", blocker_detail="you denied the proposed action; resume to let the assistant continue without it")
         return DecisionOut(approval=await _out(db, ap), outcome="denied")
 
-    conn = await db.get(Connection, action.connection_id)
-    capability = get_tool(action.tool_name).capability
-    mode = conn.modes.get(capability, "off")
-    if conn.status != "connected" or mode == "off" or (action.effect == "write" and mode != "read_write"):
-        return await invalidate(f"{conn.account_label} no longer allows this action", "permission_changed")
+    if action.connection_id is not None:  # browser data-sharing approvals use no provider account
+        conn = await db.get(Connection, action.connection_id)
+        capability = get_tool(action.tool_name).capability
+        mode = conn.modes.get(capability, "off")
+        if conn.status != "connected" or mode == "off" or (action.effect == "write" and mode != "read_write"):
+            return await invalidate(f"{conn.account_label} no longer allows this action", "permission_changed")
     ap.state, ap.decided_at = "approved", now
     action.state = "approved"
     db.add(AuditLog(owner_id=owner.id, actor="owner", type="approval.granted", subject_id=action.id, sanitized={"tool": action.tool_name, "args_hash": ap.args_hash}))

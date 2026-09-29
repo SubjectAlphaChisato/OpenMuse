@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { api2, ApiError, Automation, AutomationKind, AutomationPreview, automationsApi, AutomationSpec, Connection, Me } from "../api";
+import { api2, ApiError, Automation, AutomationKind, AutomationPreview, automationResume, automationsApi, AutomationSpec, Connection, Me } from "../api";
 
 const DAYS = [["mon", "Mon"], ["tue", "Tue"], ["wed", "Wed"], ["thu", "Thu"], ["fri", "Fri"], ["sat", "Sat"], ["sun", "Sun"]];
 const PAUSE_TEXT: Record<string, string> = {
   connection_disconnected: "Paused: an account it uses was disconnected. Edit it or delete it.",
   reauth_required: "Paused: an account it uses needs reconnecting. It resumes after you reconnect.",
   connection_error: "Paused: an account it uses has an error.",
+  restored: "Paused after a restore from backup. Resume it if you still want it.",
 };
 const STATE_TEXT: Record<string, string> = {
   started: "ran", pending: "waiting for the previous run", coalesced: "merged into a later run", missed_paused: "skipped while paused", cancelled: "cancelled",
@@ -156,6 +157,7 @@ export function Automations({ me, tick, announce }: { me: Me; tick: number; anno
             </details>
           )}
           <div className="row">
+            {a.paused_reason === "restored" && <button className="primary" onClick={() => run(async () => { await automationResume(a); return `${a.name} resumed.`; })}>Resume</button>}
             {!a.completed_at && <button onClick={() => run(async () => { await automationsApi.setEnabled(a, !a.enabled); return `${a.name} turned ${a.enabled ? "off" : "on"}.`; })}>
               {a.enabled ? "Turn off" : "Turn on"}</button>}
             <button onClick={() => { if (confirm(`Delete “${a.name}”? Any run in progress is cancelled.`)) void run(async () => { await automationsApi.remove(a); return `Deleted “${a.name}”.`; }); }}>Delete</button>

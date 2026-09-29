@@ -12,6 +12,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from opa.api.routers import approvals, auth, connections, conversations, events, oauth, tasks
 from opa.api.routers import automations as automations_router
+from opa.api.routers import browser as browser_router
+from opa.api.routers import data as data_router
 from opa.api.routers.artifacts import router as artifacts_router  # M4
 from opa.api.routers.memory import router as memory_router  # M4
 from opa.core.clock import Clock, SystemClock
@@ -22,7 +24,7 @@ from opa.db.engine import get_sessionmaker
 log = logging.getLogger("opa.api")
 
 
-def create_app(settings: Settings | None = None, clock: Clock | None = None, sessionmaker: async_sessionmaker | None = None, broker=None) -> FastAPI:
+def create_app(settings: Settings | None = None, clock: Clock | None = None, sessionmaker: async_sessionmaker | None = None, broker=None, browser=None) -> FastAPI:
     settings = settings or get_settings()
     app = FastAPI(title="Open Personal Agent API", version="0.1.0", openapi_url="/api/openapi.json", docs_url="/api/docs")
     app.state.settings = settings
@@ -33,6 +35,11 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None, ses
 
         broker = BrokerClient(settings.broker_url, settings.internal_token)
     app.state.broker = broker
+    if browser is None and settings.browser_url and settings.internal_token:
+        from opa.browser.client import BrowserClient
+
+        browser = BrowserClient(settings.browser_url, settings.internal_token)
+    app.state.browser = browser
 
     @app.middleware("http")
     async def request_id_mw(request: Request, call_next):
@@ -70,6 +77,8 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None, ses
     app.include_router(approvals.router)
     app.include_router(oauth.router)
     app.include_router(automations_router.router)
+    app.include_router(browser_router.router)
+    app.include_router(data_router.router)
     app.include_router(artifacts_router)
     app.include_router(memory_router)
 

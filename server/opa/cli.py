@@ -73,7 +73,10 @@ def worker() -> None:
     broker = BrokerClient(s.broker_url, s.internal_token) if s.internal_token else None
     if broker is None:
         logging.warning("OPA_INTERNAL_TOKEN is not set; connector tools are disabled")
-    w = Worker(s, get_sessionmaker(), build_adapter(s), broker=broker)
+    from opa.browser.client import BrowserClient
+
+    browser_client = BrowserClient(s.browser_url, s.internal_token) if s.browser_url and s.internal_token else None
+    w = Worker(s, get_sessionmaker(), build_adapter(s), broker=broker, browser=browser_client)
     asyncio.run(w.run_forever())
 
 
@@ -110,6 +113,58 @@ def scheduler() -> None:
     asyncio.run(Scheduler(s, get_sessionmaker(), SystemClock(), broker).run_forever())
 
 
+@app.command()
+def browser() -> None:
+    """Run the isolated browser service (Chromium through the public-web proxy)."""
+    import uvicorn
+
+    from opa.browser.app import create_browser_app
+    from opa.browser.service import BrowserService
+
+    logging.basicConfig(level=logging.INFO)
+    s = get_settings()
+    svc = BrowserService(s.web_proxy_url)
+    app_ = create_browser_app(svc, s.internal_token, reap_interval=60)
+
+    @app_.on_event("startup")
+    async def _start() -> None:
+        await svc.start()
+
+    @app_.on_event("shutdown")
+    async def _stop() -> None:
+        await svc.close()
+
+    uvicorn.run(app_, host=s.bind_host, port=s.browser_bind_port)
+
+
+@app.command("backup")
+def backup_cmd(out_dir: str, broker: bool = typer.Option(False, "--broker", help="also dump the encrypted credential store (keep OPA_BROKER_KEK separate)")) -> None:
+    """Back up the database (schema public) and the artifact files into an empty directory (DATA-01)."""
+    from opa.data.backup import BackupError, backup
+
+    s = get_settings()
+    try:
+        m = backup(s.database_url, s.artifact_dir, out_dir, include_broker=broker, bin_dir=s.pg_bin_dir)
+    except BackupError as e:
+        typer.echo(f"backup failed: {e}")
+        raise typer.Exit(code=1)
+    typer.echo(f"backup written to {out_dir} (revision {m['alembic_revision']}, {len(m['files'])} files)")
+
+
+@app.command("restore")
+def restore_cmd(src_dir: str) -> None:
+    """Restore a backup into an EMPTY database and artifact directory, then pause automations and cancel pending approvals."""
+    from opa.data.backup import BackupError, restore
+
+    s = get_settings()
+    try:
+        r = restore(s.database_url, s.artifact_dir, src_dir, bin_dir=s.pg_bin_dir)
+    except BackupError as e:
+        typer.echo(f"restore failed: {e}")
+        raise typer.Exit(code=1)
+    typer.echo(f"restored; safety steps: {r['safety']}. Now run `opa db-roles` and review paused automations.")
+
+
 @app.command("db-roles")
 def db_roles() -> None:
     """Create or update the opa_app and opa_broker roles and their grants. Run after every migration."""
@@ -126,15 +181,35 @@ def db_roles() -> None:
 
 
 @app.command()
-def proxy(listen: str = "0.0.0.0:3128", allow: list[str] = typer.Option(..., help="host:port allowed through, repeatable")) -> None:
-    """Run the egress proxy with an allowlist (the worker's only route to the model API)."""
-    from opa.proxy import AllowlistPolicy, serve
+def proxy(listen: str = "0.0.0.0:3128", policy: str = typer.Option("allowlist", help="allowlist (model host) or public-web (browser)"),
+          allow: list[str] = typer.Option([], help="host:port allowed through, repeatable (allowlist policy)"),
+          fixture_host: list[str] = typer.Option([], help="demo only: name=ip:port treated as a public site (public-web policy)")) -> None:
+    """Run an egress proxy: the worker's route to the model API, or the browser's route to the public web."""
+    from opa.proxy import AllowlistPolicy, PublicWebPolicy, serve
 
     logging.basicConfig(level=logging.INFO)
     host, _, port = listen.rpartition(":")
+    if policy == "public-web":
+        if fixture_host and get_settings().mode != "demo":
+            typer.echo("--fixture-host is only allowed in demo mode")
+            raise typer.Exit(code=2)
+        resolver, override = {}, {}
+        for item in fixture_host:
+            name, _, target = item.partition("=")
+            ip, _, p = target.rpartition(":")
+            resolver[name], override[name] = ip, int(p)
+        pol = PublicWebPolicy(resolver=resolver or None, public_override=override or None)
+    elif policy == "allowlist":
+        if not allow:
+            typer.echo("the allowlist policy needs at least one --allow host:port")
+            raise typer.Exit(code=2)
+        pol = AllowlistPolicy(allow)
+    else:
+        typer.echo("policy must be allowlist or public-web")
+        raise typer.Exit(code=2)
 
     async def run() -> None:
-        server = await serve(host, int(port), AllowlistPolicy(allow))
+        server = await serve(host, int(port), pol)
         async with server:
             await server.serve_forever()
 

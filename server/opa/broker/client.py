@@ -49,6 +49,9 @@ class BrokerClient:
     async def revoke(self, connection_id: str, owner_id: str) -> dict[str, Any]:
         return await self._post("/internal/connections/revoke", {"connection_id": connection_id, "owner_id": owner_id})
 
+    async def purge(self, connection_id: str, owner_id: str) -> dict[str, Any]:
+        return await self._post("/internal/connections/purge", {"connection_id": connection_id, "owner_id": owner_id})
+
     async def health(self, connection_id: str, owner_id: str) -> dict[str, Any]:
         return await self._post("/internal/connections/health", {"connection_id": connection_id, "owner_id": owner_id})
 

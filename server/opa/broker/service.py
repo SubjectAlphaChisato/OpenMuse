@@ -418,6 +418,21 @@ class Broker:
             await self._audit(db, owner_id, "connection.revoked" if revoked else "connection.revocation_failed", connection_id, {"error": error})
         return {"revoked": revoked, "error": error}
 
+    async def purge(self, connection_id: str, owner_id: str) -> dict[str, Any]:
+        """DATA-01: remove everything the broker holds for a connection (credentials, demo mailbox, dispatch claims)."""
+        from sqlalchemy import delete as sa_delete
+
+        from opa.db.models import BrokerCredential, FixtureState
+
+        async with self.sm() as db, db.begin():
+            conn = await db.get(Connection, connection_id)
+            if conn is None or conn.owner_id != owner_id:
+                raise ConnectorError("not_found", "connection not found")
+            await db.execute(sa_delete(BrokerCredential).where(BrokerCredential.connection_id == connection_id))
+            await db.execute(sa_delete(FixtureState).where(FixtureState.connection_id == connection_id))
+            await db.execute(sa_delete(DispatchClaim).where(DispatchClaim.action_id.in_(select(Action.id).where(Action.connection_id == connection_id))))
+        return {"purged": True}
+
     async def health(self, connection_id: str, owner_id: str) -> dict[str, Any]:
         async with self.sm() as db:
             conn = await db.get(Connection, connection_id)

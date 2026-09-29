@@ -115,6 +115,10 @@ def create_broker_app(broker: Broker, *, sweep_interval: float | None = None) ->
     async def revoke(body: OwnedConnection) -> dict[str, Any]:
         return await broker.revoke(body.connection_id, body.owner_id)
 
+    @app.post("/internal/connections/purge", dependencies=guarded)
+    async def purge(body: OwnedConnection) -> dict[str, Any]:
+        return await broker.purge(body.connection_id, body.owner_id)
+
     @app.post("/internal/connections/health", dependencies=guarded)
     async def health_check(body: OwnedConnection) -> dict[str, Any]:
         return await broker.health(body.connection_id, body.owner_id)
