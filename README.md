@@ -25,7 +25,6 @@
 
 <a id="zh"></a>
 
-## 🇨🇳 中文
 
 ### 💡 OpenMuse 是什么？
 
@@ -45,7 +44,7 @@ OpenMuse 是一个**跑在你自己机器上的私人 AI 助理**。你只需要
 | ✅ **10/10 发布关卡** | 锁定依赖、代码检查、数据库迁移、密钥扫描、浏览器冒烟测试、全新安装…… |
 | 🧩 **10 个技能（Skills）** | Gmail · 日历 · Drive · Notion · GitHub · 文件 · 记忆 · 自动化 · 浏览器 · 每日简报 |
 
-### 📸 看看它长什么样
+### 📸 
 
 | 在聊天里连接账号 | 权限升级也要你同意 | 发邮件前逐字确认 |
 |:---:|:---:|:---:|
@@ -53,7 +52,7 @@ OpenMuse 是一个**跑在你自己机器上的私人 AI 助理**。你只需要
 | **一键分享对话快照** | **别人看到的只读页面** | **技能与账号一览** |
 | <img src="docs/screenshots/demo/demo-9-share-dialog.png" width="260"> | <img src="docs/screenshots/demo/demo-11-shared-page.png" width="260"> | <img src="docs/screenshots/demo/demo-8-skills-and-accounts.png" width="260"> |
 
-### 🧩 能做什么
+### 🧩 
 
 - **💬 聊天就是一切** —— 连接、修改权限、重新登录、断开账号，全部在对话里说一句就行；确认卡片直接出现在聊天中。
 - **📧 Gmail / 📅 Google 日历** —— 搜索、阅读、总结；起草邮件和日程变更，你批准后才发送。
