@@ -1,4 +1,4 @@
-# Open Personal Agent — local deployment through milestone M2.
+# OpenMuse — local deployment through milestone M2.
 # Trust boundaries follow docs/tech-design.md section 2:
 #   * `internal` has no route to the internet; postgres, api, worker, broker share it.
 #   * the worker's only external route is the egress proxy (model host allowlist) on `model-egress`.

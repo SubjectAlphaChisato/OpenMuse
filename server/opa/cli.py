@@ -8,7 +8,7 @@ import typer
 
 from opa.core.settings import get_settings
 
-app = typer.Typer(help="Open Personal Agent")
+app = typer.Typer(help="OpenMuse")
 
 
 @app.command()

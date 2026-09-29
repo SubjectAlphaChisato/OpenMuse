@@ -19,7 +19,7 @@ All notable changes are recorded here. Versions follow [Semantic Versioning](htt
 
 ## 0.1.0 — unreleased
 
-First release candidate of Open Personal Agent, implementing `docs/open-muse-implementation-requirements.md` v0.1.1.
+First release candidate of OpenMuse, implementing `docs/open-muse-implementation-requirements.md` v0.1.1.
 
 ### Added
 - **Foundation (M1):** single-owner sign-in with CSRF and throttling; persistent chat with side conversations; durable background tasks with leases, fencing, budgets, cancel, resume, and retry; live updates over server-sent events with replay; Claude and scripted model adapters.

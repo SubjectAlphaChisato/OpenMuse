@@ -1,4 +1,4 @@
-"""Open Personal Agent."""
+"""OpenMuse: an open-source, self-hostable personal agent. The Python package keeps its original name, opa."""
 from importlib.metadata import PackageNotFoundError, version as _version
 
 try:

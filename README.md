@@ -1,17 +1,191 @@
-# Open Personal Agent
+<div align="center">
 
-A self-hostable personal agent: persistent chat, durable background tasks, and (in later milestones) Gmail and Google Calendar connectors with enforced human approval for every external write.
+# ✨ OpenMuse
 
-**Status: all six milestones implemented; release gates pending.** See [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md). Chat, background tasks, approvals, Gmail and Google Calendar (live verification pending), files, memory, schedules, calendar-change triggers, a restricted public-web browser, export, delete-all, and backup and restore work; a built-in demo account works without any credentials. Still open before a release: the accessibility gates (A17), a fresh Docker Compose install, and live Google and Claude checks.
+### 你的私人 AI 助理 —— 开源、自托管、每一步都先问你。
+### Your personal AI agent — open source, self-hosted, and it asks before it acts.
 
-- Requirements: [docs/open-muse-implementation-requirements.md](docs/open-muse-implementation-requirements.md)
-- Technical design: [docs/tech-design.md](docs/tech-design.md)
+**⚡ 用 [LingCode](https://lingcode.dev) 一个周末从零做完 · Built from scratch in one weekend with [LingCode](https://lingcode.dev) ⚡**
 
-## Run locally without Docker
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+![Python 3.12](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)
+![React 18](https://img.shields.io/badge/react-18-61DAFB?logo=react&logoColor=black)
+![PostgreSQL 16](https://img.shields.io/badge/postgres-16-4169E1?logo=postgresql&logoColor=white)
+![Tests: 269 passing](https://img.shields.io/badge/tests-269%20passing-2ea44f)
+![Release gates: 10/10](https://img.shields.io/badge/release%20gates-10%2F10-2ea44f)
+[![Built with LingCode](https://img.shields.io/badge/built%20with-LingCode-8A2BE2)](https://lingcode.dev)
 
-Requires [uv](https://docs.astral.sh/uv/), Node 20+ with npm, and PostgreSQL 16 (the test suite starts an embedded one on its own).
+**[中文](#zh) · [English](#en)**
 
-**Install** (exact versions from `server/uv.lock` and `web/package-lock.json`; the release check runs this block verbatim in an empty copy of the repository):
+<img src="docs/screenshots/demo/demo-3-brief.png" alt="OpenMuse reads tomorrow's calendar and email and suggests what to prepare" width="760">
+
+</div>
+
+---
+
+<a id="zh"></a>
+
+## 🇨🇳 中文
+
+### 💡 OpenMuse 是什么？
+
+OpenMuse 是一个**跑在你自己机器上的私人 AI 助理**。你只需要**聊天**：让它看你的日程、读邮件、翻 Google Drive / Notion / GitHub、写简报、定时提醒、上网查资料 —— 连「连接账号」这件事本身，也是在对话里完成的。
+
+而最重要的一点：**它永远不会背着你做事。** 发邮件、改日程、扩大权限，每一步都会在聊天里弹出一张卡片，写清楚**到底要做什么**，等你点「允许」才执行。
+
+### ⚡ 一个周末，用 LingCode 从零到能用
+
+整个项目 —— 需求、技术设计、后端、前端、测试、发布流程 —— **用 [LingCode](https://lingcode.dev) 在一个周末里完成**。不是一个玩具 Demo，而是一套带着完整工程纪律的系统：
+
+| | |
+|---|---|
+| 🐍 **约 12,000 行** Python 后端 | FastAPI · PostgreSQL · 6 个相互隔离的服务 |
+| ⚛️ **约 1,900 行** React 前端 | 聊天优先，无障碍（axe-core）自动检查通过 |
+| 🧪 **269 个自动化测试** | 外加「变异测试」：故意把安全规则改坏，确认测试一定能抓到 |
+| ✅ **10/10 发布关卡** | 锁定依赖、代码检查、数据库迁移、密钥扫描、浏览器冒烟测试、全新安装…… |
+| 🧩 **10 个技能（Skills）** | Gmail · 日历 · Drive · Notion · GitHub · 文件 · 记忆 · 自动化 · 浏览器 · 每日简报 |
+
+### 📸 看看它长什么样
+
+| 在聊天里连接账号 | 权限升级也要你同意 | 发邮件前逐字确认 |
+|:---:|:---:|:---:|
+| <img src="docs/screenshots/demo/demo-2-connect-in-chat.png" width="260"> | <img src="docs/screenshots/demo/demo-4-access-in-chat.png" width="260"> | <img src="docs/screenshots/demo/demo-5-approve-in-chat.png" width="260"> |
+| **一键分享对话快照** | **别人看到的只读页面** | **技能与账号一览** |
+| <img src="docs/screenshots/demo/demo-9-share-dialog.png" width="260"> | <img src="docs/screenshots/demo/demo-11-shared-page.png" width="260"> | <img src="docs/screenshots/demo/demo-8-skills-and-accounts.png" width="260"> |
+
+### 🧩 能做什么
+
+- **💬 聊天就是一切** —— 连接、修改权限、重新登录、断开账号，全部在对话里说一句就行；确认卡片直接出现在聊天中。
+- **📧 Gmail / 📅 Google 日历** —— 搜索、阅读、总结；起草邮件和日程变更，你批准后才发送。
+- **📂 Google Drive · 📝 Notion · 🐙 GitHub** —— 只读访问文档、页面、数据库、仓库、Issue 和 PR。
+- **🧠 技能系统** —— 每项能力都是一个 `SKILL.md`，按需加载；你也可以用纯文字写自己的技能（例如「每周回顾」），无需写代码。
+- **⏰ 自动化** —— 「每个工作日早上 8 点提醒我看邮件」「日历一变就告诉我」，确认后才生效。
+- **📄 文件与记忆** —— 生成 Markdown / CSV / PDF；只记住你明确要求它记住的事。
+- **🌐 隔离浏览器** —— 只能访问公网页面，不能登录、不能提交表单；可以实时观看、随时接管。
+- **🔗 分享** —— 把选中的消息生成只读快照链接，可设 1 / 7 / 30 天有效，随时关闭。
+- **🗂️ 你的数据归你** —— 一键导出全部数据、一键彻底删除、备份与恢复。
+
+### 🔒 安全设计（不是口号）
+
+- **每一次对外写入都要你亲手批准**，批准的是**精确内容**（收件人、正文、附件都绑定哈希），24 小时过期，不可重放。
+- **AI 自己不能给自己加权限**：它只能「申请」，只有你登录后的点击才能生效；降低权限则立即生效。
+- **邮件、网页、文件里的内容一律视为不可信**，不会被当作指令执行。
+- **密钥只在 broker 进程里**，加密存储；AI 所在的 worker 进程连不上外网，只能访问模型接口。
+- **分享链接只存哈希**，页面不含任何脚本和 Cookie，不被搜索引擎收录，过期或关闭即删除内容。
+
+### 🚀 快速开始（演示模式，无需任何账号或 API Key）
+
+**需要：** [uv](https://docs.astral.sh/uv/)、Node 20+（含 npm）。数据库会自动内嵌启动，不用另装。
+
+```sh
+git clone https://github.com/SubjectAlphaChisato/OpenMuse.git openmuse && cd openmuse
+
+# 1. 安装（版本全部锁定）
+cd server
+uv sync --frozen --extra dev --extra browser
+.venv/bin/playwright install chromium
+cd ../web
+npm ci
+npm run build
+cd ..
+
+# 2. 运行 —— 一条命令启动数据库和全部服务
+npm run dev          # 或者：node scripts/dev.mjs
+```
+
+打开 **http://127.0.0.1:8080**，用 `demo@example.com` / `demo-password-123` 登录，然后在聊天里说「**Connect my accounts**」试试。按 `Ctrl-C` 停止；数据保存在 `server/data/`。
+
+> 演示模式使用示例邮箱、日历和文档，助理的回复是预设脚本，**不会连接任何真实服务**。在 LingCode 里直接点 **Run** 也能启动。
+
+### 🔌 使用真实账号和 Claude
+
+1. 复制配置：`cp .env.example .env`
+2. 设置 `OPA_MODE=live`、`OPA_MODEL_PROVIDER=anthropic`，并填入 `OPA_ANTHROPIC_API_KEY`。
+3. 按需填写 Google / Notion / GitHub 的 OAuth 凭据（详细步骤见 [运维指南](docs/OPERATIONS.md)）。
+4. 用 Docker Compose 部署（见下一节），然后在聊天里说「连接我的 Google 账号」。
+
+### ☁️ 部署（Docker Compose）
+
+在任何装有 Docker 的机器上：
+
+```sh
+cp .env.example .env                 # 设置三个数据库密码和 OPA_INTERNAL_TOKEN
+server/.venv/bin/opa generate-kek    # 把输出填入 .env 的 OPA_BROKER_KEK
+docker compose --env-file .env -f deploy/compose.yaml up --build -d
+docker compose --env-file .env -f deploy/compose.yaml run --rm api opa bootstrap-owner you@example.com
+```
+
+服务默认只监听 `127.0.0.1:8080`。要从外网访问（例如分享链接给别人），请放在 **HTTPS 反向代理**后面，并设置 `OPA_SECURE_COOKIES=true` 和 `OPA_PUBLIC_BASE_URL=https://你的域名`。备份、恢复、升级等见 [运维指南](docs/OPERATIONS.md)。
+
+### 📊 项目状态：v0.2 预览版
+
+诚实地说：所有功能都通过了自动化测试，但**真实的 Google、Notion、GitHub 和 Claude 接口还没有做过线上验证**（测试使用的是按官方文档实现的模拟服务），**Docker Compose 部署也还没有在真实 Docker 环境中跑过**。详见 [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)。欢迎试用、提 Issue、贡献代码！
+
+### 📚 文档
+
+[运维指南](docs/OPERATIONS.md) · [技能开发](docs/skills.md) · [技术设计](docs/tech-design.md) · [需求规格](docs/open-muse-implementation-requirements.md) · [更新日志](CHANGELOG.md) · [参与贡献](CONTRIBUTING.md)
+
+---
+
+<a id="en"></a>
+
+## 🇺🇸 English
+
+### 💡 What is OpenMuse?
+
+OpenMuse is a **personal AI agent that runs on your own machine**. You just **chat**: it reads your calendar and email, digs through Google Drive, Notion, and GitHub, writes briefs, sets reminders, and looks things up on the web. Even *connecting your accounts* happens in the conversation.
+
+And the part that matters most: **it never acts behind your back.** Sending an email, changing an event, or asking for more access always shows up as a card in the chat that says **exactly** what will happen, and nothing happens until you click Allow.
+
+### ⚡ Built from scratch in one weekend with LingCode
+
+The whole project (requirements, technical design, backend, frontend, tests, and release tooling) was **built with [LingCode](https://lingcode.dev) in one weekend**. Not a toy demo, but a system with real engineering discipline:
+
+| | |
+|---|---|
+| 🐍 **~12,000 lines** of Python backend | FastAPI · PostgreSQL · six isolated services |
+| ⚛️ **~1,900 lines** of React frontend | chat-first, passes automated accessibility checks (axe-core) |
+| 🧪 **269 automated tests** | plus mutation checks: each safety rule was deliberately broken to prove a test catches it |
+| ✅ **10/10 release gates** | locked dependencies, lint, migrations, secret scan, browser smoke test, fresh install, and more |
+| 🧩 **10 skills** | Gmail · Calendar · Drive · Notion · GitHub · Files · Memory · Automations · Browser · Daily brief |
+
+### 📸 Screenshots
+
+| Connect accounts in chat | Wider access needs your OK | Approve the exact email |
+|:---:|:---:|:---:|
+| <img src="docs/screenshots/demo/demo-2-connect-in-chat.png" width="260"> | <img src="docs/screenshots/demo/demo-4-access-in-chat.png" width="260"> | <img src="docs/screenshots/demo/demo-5-approve-in-chat.png" width="260"> |
+| **Share a conversation snapshot** | **What the recipient sees** | **Skills and accounts** |
+| <img src="docs/screenshots/demo/demo-9-share-dialog.png" width="260"> | <img src="docs/screenshots/demo/demo-11-shared-page.png" width="260"> | <img src="docs/screenshots/demo/demo-8-skills-and-accounts.png" width="260"> |
+
+### 🧩 What it does
+
+- **💬 Chat is the interface.** Connect, change access, reconnect, or disconnect an account by asking; the confirmation card appears right in the conversation.
+- **📧 Gmail / 📅 Google Calendar.** Search, read, and summarize; draft emails and event changes that are sent only after you approve them.
+- **📂 Google Drive · 📝 Notion · 🐙 GitHub.** Read-only access to documents, pages, databases, repositories, issues, and pull requests.
+- **🧠 Skills.** Every capability is a `SKILL.md` loaded on demand. Write your own in plain text (say, a "weekly review"), no code needed.
+- **⏰ Automations.** "Remind me every weekday at 8:00 to review email", "tell me when my calendar changes"; nothing runs until you confirm it.
+- **📄 Files and memory.** Generates Markdown, CSV, and PDF; remembers only what you explicitly ask it to.
+- **🌐 An isolated browser.** Public web pages only, no sign-ins or forms; watch it live and take control at any time.
+- **🔗 Sharing.** Turn chosen messages into a read-only snapshot link that lasts 1, 7, or 30 days, and turn it off whenever you like.
+- **🗂️ Your data stays yours.** One-click export, one-click delete-all, and backup and restore.
+
+### 🔒 Security by design
+
+- **Every external write needs your explicit approval** of the **exact** content (recipients, body, and attachments are bound by hash). Approvals expire after 24 hours and cannot be replayed.
+- **The AI cannot grant itself access.** It can only *ask*; only your signed-in click makes it happen. Reducing access applies at once.
+- **Email, web pages, and files are treated as untrusted data**, never as instructions.
+- **Credentials live only in the broker**, encrypted at rest. The worker that runs the AI has no internet route except to the model API.
+- **Share links are stored only as hashes.** The page has no scripts or cookies, stays out of search engines, and its content is deleted when the link expires or is turned off.
+
+### 🚀 Quick start (demo mode: no accounts or API keys needed)
+
+**Requires** [uv](https://docs.astral.sh/uv/) and Node 20+ with npm. The database is embedded and starts automatically.
+
+```sh
+git clone https://github.com/SubjectAlphaChisato/OpenMuse.git openmuse && cd openmuse
+```
+
+**1. Install** (every version is locked; the release check runs this block verbatim in an empty copy of the repository):
 
 <!-- fresh-install:begin -->
 ```sh
@@ -25,129 +199,51 @@ cd ..
 ```
 <!-- fresh-install:end -->
 
-**Set up the database and your account:**
+**2. Run** (one command starts the database and every service):
 
 ```sh
-cd server
-export OPA_DATABASE_URL=postgresql+asyncpg://USER:PASS@localhost:5432/opa
-.venv/bin/opa migrate
-.venv/bin/opa bootstrap-owner you@example.com     # the password is read from a hidden prompt
-.venv/bin/opa version                             # prints the version and the schema revision it expects
+npm run dev          # or: node scripts/dev.mjs
 ```
 
-**Start the services** (one terminal each, all with the same `OPA_DATABASE_URL` and `OPA_INTERNAL_TOKEN`):
+Open **http://127.0.0.1:8080**, sign in with `demo@example.com` / `demo-password-123`, and say "**Connect my accounts**" in the chat. Press `Ctrl-C` to stop; your data is kept in `server/data/`.
+
+> Demo mode uses a sample mailbox, calendar, and documents, and the assistant's replies are scripted; **no real service is contacted**. In LingCode, just press **Run**.
+
+### 🔌 Use real accounts and Claude
+
+1. Copy the settings: `cp .env.example .env`
+2. Set `OPA_MODE=live` and `OPA_MODEL_PROVIDER=anthropic`, and fill in `OPA_ANTHROPIC_API_KEY`.
+3. Add OAuth credentials for Google, Notion, or GitHub as needed (step by step in the [operations guide](docs/OPERATIONS.md)).
+4. Deploy with Docker Compose (next section), then say "connect my Google account" in the chat.
+
+### ☁️ Deploy (Docker Compose)
+
+On any machine with Docker:
 
 ```sh
-export OPA_INTERNAL_TOKEN=$(openssl rand -hex 32)
-OPA_WEB_DIST_DIR=../web/dist OPA_BROWSER_URL=http://127.0.0.1:8082 .venv/bin/opa api   # http://127.0.0.1:8080
-.venv/bin/opa broker                                                                  # port 8081
-OPA_BROWSER_URL=http://127.0.0.1:8082 .venv/bin/opa worker
-.venv/bin/opa scheduler                                                               # schedules and calendar-change triggers
-.venv/bin/opa proxy --policy public-web --listen 127.0.0.1:3129                       # the browser's only route out
-OPA_WEB_PROXY_URL=http://127.0.0.1:3129 .venv/bin/opa browser                         # isolated Chromium, port 8082
-```
-
-In the app, ask in Chat to connect the demo account (for example "Connect my accounts") and confirm the card to try approvals without any external service. Accounts start read only; ask the assistant to let it send email or change events, confirm that card, and every write still waits for your approval in the chat.
-
-For production-like isolation, create separate database roles after migrating (`opa db-roles`) and point the broker at the `opa_broker` role with `OPA_BROKER_DATABASE_URL`. Re-run `opa db-roles` after every migration.
-
-For UI development, run `npm run dev` in `web/` instead; Vite proxies `/api` to port 8080. After changing the API, run `.venv/bin/python scripts/export_openapi.py ../web/openapi.json` and `npm run gen:api` so the frontend's generated types and contract check stay current.
-
-## Run with Docker Compose
-
-```sh
-cp .env.example .env        # set the three database passwords and OPA_INTERNAL_TOKEN
-server/.venv/bin/opa generate-kek   # paste the output into OPA_BROKER_KEK
+cp .env.example .env                 # set the three database passwords and OPA_INTERNAL_TOKEN
+server/.venv/bin/opa generate-kek    # paste the output into OPA_BROKER_KEK in .env
 docker compose --env-file .env -f deploy/compose.yaml up --build -d
 docker compose --env-file .env -f deploy/compose.yaml run --rm api opa bootstrap-owner you@example.com
 ```
 
-The API binds to `127.0.0.1:8080` only. The worker has no internet route except an egress proxy that allows only the model host; only the broker can reach provider APIs. For remote access, put it behind an HTTPS reverse proxy and set `OPA_SECURE_COOKIES=true`.
+The app listens on `127.0.0.1:8080` only. To reach it from elsewhere (for example, so people can open your share links), put it behind an **HTTPS reverse proxy** and set `OPA_SECURE_COOKIES=true` and `OPA_PUBLIC_BASE_URL=https://your-domain`. Backups, restore, running the services yourself, and upgrades are in the [operations guide](docs/OPERATIONS.md).
 
-## Model configuration
+### 📊 Status: v0.2 preview
 
-`OPA_MODE=demo` with `OPA_MODEL_PROVIDER=scripted` needs no keys and makes no network calls. For real use set `OPA_MODE=live`, `OPA_MODEL_PROVIDER=anthropic`, and `OPA_ANTHROPIC_API_KEY`. Missing configuration appears as a setup banner in the UI rather than a silent fallback.
+To be straight about it: every feature passes the automated tests, but **the real Google, Notion, GitHub, and Claude APIs have not been exercised live yet** (tests use fakes built to the providers' published contracts), and **the Docker Compose deployment has not yet been run on a real Docker host**. Details in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md). Try it, open issues, and send pull requests!
 
-## Skills, and managing accounts from the chat
+### 📚 Docs
 
-Every capability is a skill (Gmail, Calendar, Drive, Notion, GitHub, files, memory, automations, the browser, and a daily-brief workflow). The assistant loads a skill when a request needs it. To connect an account or change what the assistant may do, ask in Chat, for example "connect my Notion" or "let the assistant send email": it shows a card, and nothing that adds access happens until you confirm it. The app is chat-first: account cards and approvals appear in the conversation, and everything else (tasks, automations, files, memory, the browser, skills and accounts, your data) is in the Menu. The Skills and accounts screen shows each account's access and each skill's status, and lets you turn skills off; it has no connect or change buttons. You can add your own instruction-only skills with `OPA_SKILLS_DIR`; see `docs/skills.md`.
+[Operations guide](docs/OPERATIONS.md) · [Writing skills](docs/skills.md) · [Technical design](docs/tech-design.md) · [Requirements](docs/open-muse-implementation-requirements.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md)
 
-## Sharing a conversation
+---
 
-Choose **Share** at the top of a chat, pick the messages, and create a link. Anyone with the link can read a frozen, read-only copy of those messages without signing in; later messages never appear, and account cards and files are never included. Links last 1, 7, or 30 days, and **Menu → Shared links** shows views and turns links off. The link is shown once. For people outside your machine to open it, the app must be reachable at `OPA_PUBLIC_BASE_URL` (see the HTTPS guidance above).
+<div align="center">
 
-## Connect Google (live mode)
+**OpenMuse** is an independent open-source project. It is not affiliated with or endorsed by Meta, and it is not an implementation of any Meta product.
+OpenMuse 是独立的开源项目，与 Meta 无关联，也未获其认可或背书。
 
-The app only ever requests these scopes, and write scopes only when you allow changes:
+Apache-2.0 · Made with ❤️ and [LingCode](https://lingcode.dev)
 
-| Capability | Read only | Read and propose changes adds |
-|---|---|---|
-| Gmail | `https://www.googleapis.com/auth/gmail.readonly` | `https://www.googleapis.com/auth/gmail.send` |
-| Calendar | `https://www.googleapis.com/auth/calendar.readonly` | `https://www.googleapis.com/auth/calendar.events` |
-| Drive (off by default) | `https://www.googleapis.com/auth/drive.readonly` | (no write tools yet) |
-
-Plus `openid` and `email` to identify the account.
-
-1. In Google Cloud Console, create a project and enable the **Gmail API** and **Google Calendar API** (and the **Google Drive API** if you will turn on Drive).
-2. Configure the **OAuth consent screen**. For personal use choose *External*, keep the app in *Testing*, and add your own Google address as a test user. If you have a Google Workspace domain, *Internal* avoids the limits below.
-3. Create an **OAuth client ID** of type *Web application* with this exact authorized redirect URI: `http://127.0.0.1:8080/api/oauth/google/callback` (or your HTTPS origin plus `/api/oauth/google/callback`, also set as `OPA_GOOGLE_REDIRECT_URI`).
-4. Put the client ID in `OPA_GOOGLE_CLIENT_ID` for the api and broker, and the secret in `OPA_GOOGLE_CLIENT_SECRET` for the broker only. Set `OPA_MODE=live`.
-5. In the app, ask in Chat to connect your Google account and confirm the card; it opens Google's consent screen.
-
-**Limits you should know about.** Gmail read and send are *restricted* scopes. While an External app is in Testing, Google expires its refresh tokens 7 days after sign-in; the app warns you on day 6 and shows **Reconnect**. Publishing an External app with restricted scopes requires Google's verification and a security assessment, which is outside this project. Calendar scopes are *sensitive*, not restricted. Drive read-only is *restricted*, like Gmail. Google Docs, Sheets, and Slides are read as Markdown, CSV, and plain text.
-
-**Opt-in live check.** After connecting an account, `server/scripts/live_smoke_google.py` runs read-only calls against real Google (instructions in the file). It is never run by the test suite; writes need extra flags and a throwaway calendar.
-
-## Connect Notion and GitHub (live mode, read only)
-
-Both are read-only in this release. Set `OPA_PUBLIC_BASE_URL` to the address you open the app at (default `http://127.0.0.1:8080`); the callbacks are `{OPA_PUBLIC_BASE_URL}/api/oauth/notion/callback` and `.../github/callback`. Client IDs go to the api and broker; secrets go to the broker only.
-
-**Notion.** Create a *public* integration at notion.so/profile/integrations, give it only the **Read content** capability, and add the Notion callback as a redirect URI. Put its OAuth client ID and secret in `OPA_NOTION_CLIENT_ID` and `OPA_NOTION_CLIENT_SECRET`. When you connect, Notion asks which pages to share; the assistant sees only those. Details: `docs/providers/notion.md`.
-
-**GitHub.** Create a **GitHub App** (not an OAuth App: an OAuth App would need the `repo` scope, which also grants write). Set the callback URL, leave *Expire user authorization tokens* on, and grant only read-only **Contents**, **Issues**, **Pull requests**, and **Metadata**. Put the app's client ID, a client secret, and its URL slug in `OPA_GITHUB_CLIENT_ID`, `OPA_GITHUB_CLIENT_SECRET`, and `OPA_GITHUB_APP_SLUG`, then install the app on the repositories you want the assistant to read. Details: `docs/providers/github.md`.
-
-Neither has been exercised against the real service yet; see `IMPLEMENTATION_STATUS.md`.
-
-## Tests
-
-```sh
-cd server && .venv/bin/python -m pytest          # unit + acceptance, embedded Postgres, no network
-.venv/bin/python scripts/ui_smoke.py             # real processes + headless Chromium (build web first)
-```
-
-## The browser
-
-The assistant can read public web pages through an isolated Chromium. It cannot sign in, submit forms, upload, download, buy anything, or reach private or local networks: every connection, redirect, image, script, and websocket goes through a proxy that resolves the address itself and refuses private, loopback, link-local, and cloud-metadata addresses. If a page address would carry your private data (text from your email, calendar, files, or memory), the assistant asks for your approval first and shows exactly what would be shared. Open **Browser** to watch live, **Take control** (the assistant pauses), **Resume** (cookies and site data from your turn are cleared first), or **Stop**.
-
-## Your data
-
-**Your data** has **Create export** (a ZIP of everything you created, with a JSON Schema for each file; no passwords, tokens, or credentials) and **Delete all data** (type your email address to confirm). Delete-all cancels running work, disconnects and revokes accounts, and removes your data and files; your sign-in stays. Backups taken earlier still contain your data until you delete them.
-
-## Backup, restore, and teardown
-
-Backups need the PostgreSQL 16 client tools (`pg_dump`, `pg_restore`); set `OPA_PG_BIN_DIR` if they are not on `PATH`. Run them with the database **owner** role.
-
-```sh
-# local
-OPA_DATABASE_URL=postgresql+asyncpg://OWNER:PASS@localhost:5432/opa .venv/bin/opa backup /path/to/backups/2026-10-01
-# Compose (writes to ./backups on the host)
-docker compose --env-file .env -f deploy/compose.yaml --profile ops run --rm ops opa backup /backups/2026-10-01
-```
-
-A backup is a directory with `app.dump` (the database), `artifacts.tar.gz` (your files), and `manifest.json` (SHA-256 of each). Add `--broker` to also dump the encrypted account credentials to `broker.dump`; they are useless without `OPA_BROKER_KEK`, which you must back up separately and never store with the backup.
-
-To restore, point the commands at an **empty** database and an **empty** artifact directory:
-
-```sh
-OPA_DATABASE_URL=postgresql+asyncpg://OWNER:PASS@localhost:5432/opa_restored OPA_ARTIFACT_DIR=/new/artifacts \
-  .venv/bin/opa restore /path/to/backups/2026-10-01
-.venv/bin/opa db-roles    # re-create role grants on the restored database
-```
-
-Restore verifies every file against the manifest first. Afterwards nothing resumes on its own: automations are paused (resume each in **Automations**), pending approvals are cancelled, a write that was in flight during the backup is marked "outcome unknown" for you to check, and interrupted tasks are blocked for review.
-
-Teardown: `docker compose -f deploy/compose.yaml down` stops everything and keeps your data volumes; `down -v` also deletes the database, files, and exports permanently. Take a backup first if you might need them.
-
-## License
-
-Apache-2.0. See [LICENSE](LICENSE).
+</div>

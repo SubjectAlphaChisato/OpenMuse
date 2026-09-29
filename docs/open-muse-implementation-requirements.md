@@ -1,10 +1,10 @@
-# Open Personal Agent — Coding Agent Implementation Requirements
+# OpenMuse — Coding Agent Implementation Requirements
 
 Version: 0.1.1 • Prepared: 2026-09-25 (America/Los_Angeles) • Revised: 2026-09-25
 
 Revision 0.1.1 resolves five ambiguities found in technical review: the connector SDK is now specified in Python/Pydantic to match the section 3 stack; the worker network rule is stated as an enforceable egress property; the browser live-view transport is defined; memory retrieval is defined deterministically; and the accessibility gate is split into automated and manual parts.
 
-Source: `muse-research.md`, including its September 25 connector update, and the product decisions in this conversation. “Open Personal Agent” is a working name. This is an independent implementation specification, not Meta's internal architecture or a promise of Muse feature parity.
+Source: `muse-research.md`, including its September 25 connector update, and the product decisions in this conversation. The project is now named “OpenMuse” (“Open Personal Agent” was its working name). This is an independent implementation specification, not Meta's internal architecture or a promise of Muse feature parity.
 
 ## 1. Objective and implementation contract
 

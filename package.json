@@ -1,0 +1,9 @@
+{
+  "name": "openmuse",
+  "private": true,
+  "description": "Runs the whole app locally in demo mode. The web app's own package is in web/.",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "start": "node scripts/dev.mjs"
+  }
+}

@@ -163,7 +163,7 @@ def markdown_to_pdf(text: str, title: str) -> bytes:
     if not story:
         story.append(Paragraph("", styles["BodyText"]))
     buf = io.BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=LETTER, title=title, author="Open Personal Agent", creator="Open Personal Agent",
+    doc = SimpleDocTemplate(buf, pagesize=LETTER, title=title, author="OpenMuse", creator="OpenMuse",
                             leftMargin=inch, rightMargin=inch, topMargin=inch, bottomMargin=inch, invariant=1)
     doc.build(story)
     return buf.getvalue()

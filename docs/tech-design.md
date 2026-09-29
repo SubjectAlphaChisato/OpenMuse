@@ -1,4 +1,4 @@
-# Open Personal Agent — Technical Design (v0.1)
+# OpenMuse — Technical Design (v0.1)
 
 Status: Draft 1 • 2026-09-27 • Implements `open-muse-implementation-requirements.md` v0.1.1
 
