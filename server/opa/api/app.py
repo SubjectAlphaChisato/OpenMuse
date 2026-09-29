@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+
+from opa import __version__
 import uuid
 from pathlib import Path
 
@@ -26,7 +28,7 @@ log = logging.getLogger("opa.api")
 
 def create_app(settings: Settings | None = None, clock: Clock | None = None, sessionmaker: async_sessionmaker | None = None, broker=None, browser=None) -> FastAPI:
     settings = settings or get_settings()
-    app = FastAPI(title="Open Personal Agent API", version="0.1.0", openapi_url="/api/openapi.json", docs_url="/api/docs")
+    app = FastAPI(title="Open Personal Agent API", version=__version__, openapi_url="/api/openapi.json", docs_url="/api/docs")
     app.state.settings = settings
     app.state.clock = clock or SystemClock()
     app.state.sessionmaker = sessionmaker or get_sessionmaker()

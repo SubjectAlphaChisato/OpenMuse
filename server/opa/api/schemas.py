@@ -31,6 +31,7 @@ class MeOut(BaseModel):
     setup_required: list[str]
     csrf_token: str
     approval_mode: str
+    version: str
 
 
 class PreferencesIn(BaseModel):

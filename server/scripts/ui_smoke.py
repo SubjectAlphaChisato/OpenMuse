@@ -114,6 +114,7 @@ def _wait_http(url: str, timeout: float = 15) -> None:
 
 def _drive(base: str, shots: str | None) -> int:
     def snap(page, name):
+        _axe(page, name)
         if shots:
             Path(shots).mkdir(parents=True, exist_ok=True)
             page.screenshot(path=str(Path(shots) / f"{name}.png"), full_page=True)
@@ -128,6 +129,7 @@ def _drive(base: str, shots: str | None) -> int:
 
         page.goto(base)
         expect(page.get_by_role("heading", name="Sign in")).to_be_visible()
+        _axe(page, "0-sign-in")
         # keyboard-only sign-in
         page.get_by_label("Email").focus()
         page.keyboard.type(EMAIL)
@@ -178,6 +180,10 @@ def _drive(base: str, shots: str | None) -> int:
         if errors:
             print("FAIL page errors:", errors)
             return 1
+    if AXE_FINDINGS:
+        print(f"FAIL {len(AXE_FINDINGS)} serious or critical accessibility violation(s)")
+        return 1
+    print("PASS axe-core found no serious or critical violations on any screen checked")
     print("UI smoke passed")
     return 0
 
@@ -271,6 +277,11 @@ def _start_site() -> int:
 
 
 def _m6(page, snap) -> None:
+    # ---- A17a: the M4 screens get the same axe-core scan
+    for screen in ("Files", "Memory"):
+        page.get_by_role("button", name=screen, exact=True).click()
+        expect(page.get_by_role("heading", name=screen if screen != "Files" else "Files", level=2).first).to_be_visible()
+        _axe(page, f"m4-{screen.lower()}")
     # ---- M6: the agent browses; the owner watches live, takes control, hands back, stops
     page.get_by_role("button", name="Chat").click()
     expect(page.get_by_role("button", name="Send")).to_be_enabled()
@@ -314,6 +325,26 @@ def _m6(page, snap) -> None:
     expect(page.get_by_role("status").filter(has_text="Backups made before now")).to_be_visible(timeout=15_000)
     snap(page, "11-data-deleted")
     print("PASS delete-all needs the typed email and reports what happened")
+
+
+AXE = ROOT.parent / "web" / "node_modules" / "axe-core" / "axe.min.js"
+AXE_FINDINGS: list[str] = []
+
+
+def _axe(page, label: str) -> None:
+    """A17a: run axe-core on the current screen; serious and critical violations fail the smoke."""
+    if not AXE.exists():
+        raise RuntimeError("axe-core is missing; run npm install in web/")
+    page.add_script_tag(path=str(AXE))
+    result = page.evaluate("""async () => {
+        const r = await axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'best-practice'] } });
+        return r.violations.map(v => ({ id: v.id, impact: v.impact, help: v.help, nodes: v.nodes.slice(0, 3).map(n => n.target.join(' ')) }));
+    }""")
+    for v in result:
+        line = f"{label}: {v['impact']} {v['id']} - {v['help']} at {v['nodes']}"
+        if v["impact"] in ("serious", "critical"):
+            AXE_FINDINGS.append(line)
+        print(("  axe FAIL " if v["impact"] in ("serious", "critical") else "  axe note ") + line)
 
 
 if __name__ == "__main__":

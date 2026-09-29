@@ -78,3 +78,4 @@ textarea { width: 100%; }
 .url { word-break: break-all; }
 .card.danger { border-left: 4px solid #b3261e; }
 .top nav { flex-wrap: wrap; }
+h1.brand { font-size: 1rem; margin: 0; font-weight: 700; }

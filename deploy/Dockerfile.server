@@ -11,10 +11,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
  && apt-get update && apt-get install -y --no-install-recommends postgresql-client-16 \
  && apt-get purge -y curl gnupg && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY server/pyproject.toml ./
+# Dependencies come only from the hash-pinned lock (exported from server/uv.lock); then the package itself, with no resolution.
+COPY deploy/locks/server.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir --require-hashes -r /tmp/requirements.txt && rm /tmp/requirements.txt
+COPY server/pyproject.toml server/README.md* ./
 COPY server/opa ./opa
-COPY server/alembic.ini ./
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir --no-deps . && rm -rf /app/opa
 # M4: artifact volume mount point, owned by the runtime user so a new named volume inherits it
 RUN mkdir -p /data/artifacts /data/exports /backups && chown opa:opa /data/artifacts /data/exports /backups
 USER opa

@@ -1,0 +1,16 @@
+# Keep the build context small and free of secrets and local state.
+.git
+.env
+.env.*
+!.env.example
+.mcp.json
+**/.DS_Store
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+server/.venv
+server/data
+web/node_modules
+web/dist
+backups
+.lingcode

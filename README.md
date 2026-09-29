@@ -9,36 +9,49 @@ A self-hostable personal agent: persistent chat, durable background tasks, and (
 
 ## Run locally without Docker
 
-Requires [uv](https://docs.astral.sh/uv/) and Node 20+. PostgreSQL 16 is needed; for development the test suite starts an embedded one automatically.
+Requires [uv](https://docs.astral.sh/uv/), Node 20+ with npm, and PostgreSQL 16 (the test suite starts an embedded one on its own).
+
+**Install** (exact versions from `server/uv.lock` and `web/package-lock.json`; the release check runs this block verbatim in an empty copy of the repository):
+
+<!-- fresh-install:begin -->
+```sh
+cd server
+uv sync --frozen --extra dev --extra browser
+.venv/bin/playwright install chromium
+cd ../web
+npm ci
+npm run build
+cd ..
+```
+<!-- fresh-install:end -->
+
+**Set up the database and your account:**
 
 ```sh
 cd server
-uv venv -p 3.12 && uv pip install -e ".[dev]"
 export OPA_DATABASE_URL=postgresql+asyncpg://USER:PASS@localhost:5432/opa
 .venv/bin/opa migrate
-.venv/bin/opa bootstrap-owner you@example.com     # password is read from a hidden prompt
-
-cd ../web && npm install && npm run build
-cd ../server
-export OPA_INTERNAL_TOKEN=$(openssl rand -hex 32)  # shared by api, worker, and broker
-OPA_WEB_DIST_DIR=../web/dist .venv/bin/opa api    # http://127.0.0.1:8080
-.venv/bin/opa broker                               # second terminal, port 8081
-.venv/bin/opa worker                               # third terminal
-.venv/bin/opa scheduler                            # fourth terminal: schedules and calendar-change triggers
-.venv/bin/opa proxy --policy public-web --listen 127.0.0.1:3129   # fifth: the browser's only route out
-OPA_WEB_PROXY_URL=http://127.0.0.1:3129 .venv/bin/opa browser    # sixth: isolated Chromium (port 8082)
+.venv/bin/opa bootstrap-owner you@example.com     # the password is read from a hidden prompt
+.venv/bin/opa version                             # prints the version and the schema revision it expects
 ```
 
-Give the api and worker `OPA_BROWSER_URL=http://127.0.0.1:8082` to enable browsing. Chromium comes from `.venv/bin/playwright install chromium`.
+**Start the services** (one terminal each, all with the same `OPA_DATABASE_URL` and `OPA_INTERNAL_TOKEN`):
 
 ```sh
+export OPA_INTERNAL_TOKEN=$(openssl rand -hex 32)
+OPA_WEB_DIST_DIR=../web/dist OPA_BROWSER_URL=http://127.0.0.1:8082 .venv/bin/opa api   # http://127.0.0.1:8080
+.venv/bin/opa broker                                                                  # port 8081
+OPA_BROWSER_URL=http://127.0.0.1:8082 .venv/bin/opa worker
+.venv/bin/opa scheduler                                                               # schedules and calendar-change triggers
+.venv/bin/opa proxy --policy public-web --listen 127.0.0.1:3129                       # the browser's only route out
+OPA_WEB_PROXY_URL=http://127.0.0.1:3129 .venv/bin/opa browser                         # isolated Chromium, port 8082
 ```
 
-In the app, open Connections and connect the demo account to try approvals without any external service. Accounts start read only; switch Gmail or Calendar to “Read and propose changes” to let the assistant propose writes, which always wait for your approval.
+In the app, open Connections and connect the demo account to try approvals without any external service. Accounts start read only; switch Gmail or Calendar to "Read and propose changes" to let the assistant propose writes, which always wait for your approval.
 
 For production-like isolation, create separate database roles after migrating (`opa db-roles`) and point the broker at the `opa_broker` role with `OPA_BROKER_DATABASE_URL`. Re-run `opa db-roles` after every migration.
 
-For UI development, run `npm run dev` in `web/` instead; Vite proxies `/api` to port 8080.
+For UI development, run `npm run dev` in `web/` instead; Vite proxies `/api` to port 8080. After changing the API, run `.venv/bin/python scripts/export_openapi.py ../web/openapi.json` and `npm run gen:api` so the frontend's generated types and contract check stay current.
 
 ## Run with Docker Compose
 

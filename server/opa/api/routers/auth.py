@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Request, Response
 from sqlalchemy import delete
 
+from opa import __version__
 from opa.api.auth import SESSION_COOKIE, login, record_failed_attempt
 from opa.core.errors import Unauthorized
 from opa.api.deps import ClockDep, DbDep, OwnerDep, SessionDep, SettingsDep
@@ -43,7 +44,7 @@ async def get_me(owner: OwnerDep, sess: SessionDep, settings: SettingsDep) -> Me
     return MeOut(
         id=owner.id, email=owner.email, time_zone=owner.time_zone, assistant_name=owner.assistant_name,
         response_style=owner.response_style, mode=settings.mode, setup_required=setup_problems(settings),
-        csrf_token=sess.csrf_secret, approval_mode=owner.preferences.get("approval_mode", "ask_writes"),
+        csrf_token=sess.csrf_secret, approval_mode=owner.preferences.get("approval_mode", "ask_writes"), version=__version__,
     )
 
 

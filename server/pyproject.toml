@@ -30,6 +30,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# The browser service image installs this extra; the other services do not need Playwright.
+browser = [
+  "playwright>=1.48",
+]
 dev = [
   "pytest>=8.3",
   "pytest-asyncio>=0.24",

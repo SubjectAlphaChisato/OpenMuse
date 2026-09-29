@@ -89,7 +89,7 @@ function Shell({ me: initialMe, onLogout }: { me: Me; onLogout: () => void }) {
   return (
     <div className="shell">
       <header className="top">
-        <strong>{me.assistant_name}</strong>
+        <h1 className="brand">{me.assistant_name}</h1>
         {me.mode === "demo" && <span className="badge" aria-label="Demo mode: no real provider calls">DEMO</span>}
         <nav aria-label="Main">
           {(Object.keys(labels) as Screen[]).map((s) => (

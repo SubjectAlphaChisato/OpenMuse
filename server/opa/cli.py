@@ -12,6 +12,15 @@ app = typer.Typer(help="Open Personal Agent")
 
 
 @app.command()
+def version() -> None:
+    """Print the installed version and the database schema revision it expects."""
+    from opa import __version__
+    from opa.db.migrate import current_head
+
+    typer.echo(f"opa {__version__} (schema {current_head()})")
+
+
+@app.command()
 def migrate() -> None:
     """Apply database migrations."""
     from opa.db.migrate import upgrade_head

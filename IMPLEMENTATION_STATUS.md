@@ -1,6 +1,6 @@
 # Implementation Status
 
-Last updated: 2026-09-28 (M6) • Spec: `docs/open-muse-implementation-requirements.md` v0.1.1 • Design: `docs/tech-design.md`
+Last updated: 2026-09-28 (release packaging) • Spec: `docs/open-muse-implementation-requirements.md` v0.1.1 • Design: `docs/tech-design.md`
 
 ## Milestones
 
@@ -11,7 +11,7 @@ Last updated: 2026-09-28 (M6) • Spec: `docs/open-muse-implementation-requireme
 | M3 Google connectors | **Implemented; live verification pending credentials.** Verified against an in-process fake of Google's HTTP APIs, not against Google |
 | M4 Useful outputs | **Implemented and verified locally** (fixture provider; exit criterion covered by `test_m4_exit_brief_created_revised_downloaded_and_emailed`; see M4 evidence below) |
 | M5 Automation | **Implemented and verified locally** (fixture provider; calendar sync also against the fake Google; see M5 evidence below) |
-| M6 Browser and release | **Browser, export, delete-all, backup and restore implemented and verified locally.** Release gates still open: A17 accessibility (automated and manual), a fresh Docker Compose install, frontend types generated from OpenAPI |
+| M6 Browser and release | **Implemented, packaged, and verified locally.** All automated release gates pass (`scripts/release_check.py`). Manual gates still open: A17b screen-reader pass, a Docker Compose build and run, live Google and Claude checks (see `docs/RELEASING.md`) |
 
 ## Requirement status
 
@@ -58,9 +58,10 @@ Last updated: 2026-09-28 (M6) • Spec: `docs/open-muse-implementation-requireme
 | A12 Browser boundary | Pass | `test_m6_browser_boundary.py` with real headless Chromium: a public fixture page's images, script, iframe, fetches, and websocket aimed at loopback, RFC 1918, metadata, and a name resolving privately never reach a counting private server; a redirect to loopback is blocked; `file:`, `javascript:`, `ftp:`, credentials, and private IP literals are refused before the browser; hex and decimal loopback encodings are blocked at the proxy. Removing the loopback-bypass flag makes it fail. |
 | A13 Human takeover | Pass | service level (agent commands paused; owner input only in control; resume clears cookies) and through worker and API (`test_m6_browser_agent.py`: the task parks in waiting_user, nothing runs until Resume, then it continues) |
 | A16 Export/restore | Pass | `test_m6_data.py`: every export file validates against its schema and contains no password hash, session token, CSRF secret, or internal token; a backup restored into a fresh PostgreSQL and an empty file store serves the same messages and file bytes to a new app instance, with automations paused (and recorded as missed, not run), approvals invalidated, the in-flight write unknown, and a notification; tampered backups and non-empty targets are refused |
-| A17 Accessibility | Not started | release gate: axe-core scan in the browser smoke plus a manual VoiceOver pass |
+| A17a Accessibility (automated) | Pass | axe-core scans 14 screens in the browser smoke (sign-in, chat, tasks, approvals card, automations form and preview, browser live view, notifications, connections, files, memory, your data); serious or critical findings fail. The keyboard-only approval is covered since M2. Removing the chat box label makes it fail. |
+| A17b Accessibility (manual) | Not done | a VoiceOver or NVDA pass of the approval flow must be done by a person and recorded here |
 
-Totals on 2026-09-28 after M6: 231 pytest cases pass (206 through M5, 25 added in M6, 22 of them driving real headless Chromium), on embedded PostgreSQL 16 with no network. `alembic check` reports no drift; the M6 migration downgrades and re-applies cleanly. Frontend type-checks and builds. The browser smoke passes end to end with the api, broker, worker, browser service, and public-web proxy as separate processes.
+Totals on 2026-09-28 after release packaging: 237 pytest cases pass (206 through M5, 25 added in M6 with 22 driving real headless Chromium, 6 release-gate tests), on embedded PostgreSQL 16 with no network. `alembic check` reports no drift; the M6 migration downgrades and re-applies cleanly. Frontend type-checks and builds. The browser smoke passes end to end with the api, broker, worker, browser service, and public-web proxy as separate processes.
 
 ## M2 boundary verification
 
@@ -100,6 +101,16 @@ Totals on 2026-09-28 after M6: 231 pytest cases pass (206 through M5, 25 added i
 - **Mutation checks.** Each of these makes its test fail: removing the loopback proxy-bypass flag; the private-data check; both takeover pause layers; cookie clearing on resume; the owner-stop rule; the owner filter on browser control; adding the password hash to the export allowlist; skipping the automation pause after restore; skipping the broker purge; skipping manifest verification. Two tests first passed without testing their point (the purge test never created a demo mailbox; one restore expectation was wrong) and were fixed.
 - **Browser smoke** now also: sends a research request, watches the live view, lists visited pages, takes control, scrolls, resumes, stops, creates and downloads an export, and deletes all data after typing the email.
 
+## Release packaging verification
+
+- **Lockfiles.** `server/uv.lock` pins every Python dependency; `deploy/locks/server.txt` and `browser.txt` are hash-pinned exports that the Docker images install with `pip --require-hashes` before installing the package with `--no-deps`. The development environment was synced to the lock and the full suite re-run on it (this moved `anthropic` from 1.8.0 to the locked 1.9.0). `web/package-lock.json` drives `npm ci`.
+- **Found and fixed while packaging:** the installed package could not run its own migrations (the runner looked for `alembic.ini` beside the source tree, which an installed wheel does not have), so the first `opa migrate` in any Docker image would have failed; migrations now run from the package. Playwright was only a development dependency although the browser service needs it; it is now the `browser` extra, installed only in the browser image.
+- **Docker install steps, without Docker.** The server and browser images' Python steps were reproduced in fresh virtualenvs exactly as the Dockerfiles run them (hash-checked lock, then the package): every module imports, `opa version` works, and Playwright is present only in the browser image. The images themselves have not been built.
+- **Fresh install.** `scripts/fresh_install_check.py` copied the shipped files to an empty directory, ran the README install block verbatim (`uv sync --frozen`, `playwright install`, `npm ci`, build), ran `opa migrate`, `bootstrap-owner`, and `db-roles`, and passed the full browser smoke with accessibility scan from that copy.
+- **Generated API types.** `web/src/api-types.gen.ts` is generated from the API's OpenAPI document; `src/api-contract.check.ts` makes `tsc` fail if any field the UI reads is missing from the API or has an incompatible type (checked by adding a bogus field and changing a type: both fail).
+- **Release-gate tests.** `tests/test_release_gates.py` checks every route in the OpenAPI document for anonymous rejection (more than 50) and CSRF on every state change, 17 internal routes for the internal token, and scans the code so that only `approvals.decide` can set a state to approved (a planted second assignment fails it).
+- **Secret scan.** `scripts/check_secrets.py` found none in 165 files; a planted API key and a filled-in `OPA_BROKER_KEK` were both caught.
+
 ## Not verified / known limitations
 
 - M6: the live view sends screenshots about three times a second rather than a CDP screencast, so it is not smooth video. Owner input during takeover is clicks, typed text, a fixed set of keys, and scrolling. Page JavaScript runs (sites need it) but cannot reach private addresses; the agent itself cannot run scripts. The data-sharing check looks for 12-character runs and email addresses of private context in the URL path and query; it can miss paraphrased or re-encoded data and can over-trigger on common phrases. Browser sessions live in the browser service's memory, so restarting it ends them (the worker opens a fresh one). Export is built synchronously in the request. Backup needs PostgreSQL 16 client tools; the Compose image installs them from the PGDG repository, which has not been built. Restore requires an empty database and file directory.
@@ -111,7 +122,6 @@ Totals on 2026-09-28 after M6: 231 pytest cases pass (206 through M5, 25 added i
 - M4: Compose now mounts an `artifacts` volume (read-write for api and worker, read-only for broker), but it has not been run. The PDF extraction child is time- and CPU-limited but not network- or seccomp-sandboxed. Built-in PDF fonts cover Latin-1 only. Artifact and memory tool calls are not deduplicated if the worker crashes between the tool's commit and the checkpoint. `opa artifacts-gc` now runs hourly inside `opa scheduler` (M5). No axe-core scan or VoiceOver pass was run on the new screens (A17 is M6).
 - M5: the scheduler polls every 15 seconds, so a run can start up to 15 seconds after its time (runs over 2 minutes late are marked late). Calendar triggers poll every 5 minutes, so a change is noticed within about 5 minutes plus the 60-second quiet period. The Google calendar sync path is tested against the fake Google, not real Google. An automation whose previous run is waiting for approval holds its next runs until that run finishes; the owner is notified once. The trigger's baseline is kept in the automation row and covers events from one day ago to 60 days ahead.
 - The Anthropic adapter has not been exercised against the live API (no key configured). It is code-complete but unverified.
-- Frontend API types are hand-written; generating them from OpenAPI is scheduled for M6.
 - SSE delivery polls the outbox every 500 ms rather than using `LISTEN/NOTIFY`. Correct but adds up to half a second of latency.
 - Local-toolchain note: Rollup's native addon crashes under LingCode's embedded Node, so `web/package.json` overrides Rollup with its WebAssembly build. Standard Node installs are unaffected.
 

@@ -3,8 +3,11 @@ FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 RUN useradd --create-home --uid 10002 browser
 WORKDIR /app
+COPY deploy/locks/browser.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir --require-hashes -r /tmp/requirements.txt && rm /tmp/requirements.txt \
+ && python -m playwright install --with-deps --only-shell chromium && chmod -R a+rX /ms-playwright
 COPY server/pyproject.toml ./
 COPY server/opa ./opa
-RUN pip install --no-cache-dir . && python -m playwright install --with-deps --only-shell chromium && chmod -R a+rX /ms-playwright
+RUN pip install --no-cache-dir --no-deps . && rm -rf /app/opa
 USER browser
 CMD ["opa", "browser"]
