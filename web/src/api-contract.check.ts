@@ -30,4 +30,5 @@ export type Contract = [
   Expect<Ok<Covered<UI.ExportInfo, S["ExportOut"]>>>,
   Expect<Ok<Covered<UI.ConnectionRequest, S["ConnectionRequestOut"]>>>,
   Expect<Ok<Covered<UI.Skill, S["SkillOut"]>>>,
+  Expect<Ok<Covered<UI.Share, S["ShareOut"]>>>,
 ];

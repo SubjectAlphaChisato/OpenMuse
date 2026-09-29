@@ -3,6 +3,7 @@
 Usage: .venv/bin/python scripts/demo_screenshots.py ../docs/screenshots/demo   (needs `npm run build` in ../web)
 """
 import os
+import secrets
 import signal
 import subprocess
 import sys
@@ -70,10 +71,10 @@ srv = pgserver.get_server(str(RUN / "pg"))
 url = srv.get_uri().replace("postgresql://", "postgresql+asyncpg://")
 (RUN / "script.yaml").write_text(SCRIPT)
 env = dict(os.environ, OPA_DATABASE_URL=url, OPA_MODE="demo", OPA_MODEL_PROVIDER="scripted", OPA_SCRIPTED_MODEL_PATH=str(RUN / "script.yaml"),
-           OPA_INTERNAL_TOKEN="demo-internal-token", OPA_WEB_DIST_DIR=str(SERVER.parent / "web" / "dist"), OPA_BIND_PORT=str(API),
+           OPA_WEB_DIST_DIR=str(SERVER.parent / "web" / "dist"), OPA_INTERNAL_TOKEN=secrets.token_hex(16), OPA_BIND_PORT=str(API),
            OPA_BROKER_URL=f"http://127.0.0.1:{BROKER}", OPA_BROKER_BIND_PORT=str(BROKER), OPA_BROWSER_URL=f"http://127.0.0.1:{BROWSER}",
            OPA_BROWSER_BIND_PORT=str(BROWSER), OPA_WEB_PROXY_URL=f"http://127.0.0.1:{PROXY}", OPA_ARTIFACT_DIR=str(RUN / "artifacts"),
-           OPA_EXPORT_DIR=str(RUN / "exports"))
+           OPA_EXPORT_DIR=str(RUN / "exports"), OPA_PUBLIC_BASE_URL=f"http://127.0.0.1:{API}")
 opa = str(SERVER / ".venv/bin/opa")
 subprocess.run([opa, "migrate"], env=env, check=True, capture_output=True)
 subprocess.run([str(SERVER / ".venv/bin/python"), "-c", f"""
@@ -142,6 +143,26 @@ try:
         shot("demo-6-sent")
 
         page.evaluate("window.scrollTo(0, 0)")
+        page.get_by_role("button", name="Share").click()
+        dialog = page.get_by_role("dialog", name="Share conversation")
+        dialog.get_by_label("Title").fill("Prep for Thursday's design review")
+        shot("demo-9-share-dialog", bottom=False)
+        dialog.get_by_role("button", name="Create link").click()
+        link = dialog.get_by_label("Share link")
+        expect(link).to_be_visible()
+        shot("demo-10-share-link", bottom=False)
+        url = link.input_value()
+        dialog.get_by_role("button", name="Done").click()
+        viewer = b.new_page(viewport={"width": 1000, "height": 780}, device_scale_factor=2)  # a stranger: no cookies
+        viewer.goto(url)
+        expect(viewer.get_by_role("heading", name="Prep for Thursday's design review")).to_be_visible()
+        viewer.wait_for_timeout(300)
+        viewer.screenshot(path=str(OUT / "demo-11-shared-page.png"))
+        viewer.close()
+        page.get_by_role("button", name="Menu").click()
+        page.locator("#main-menu").get_by_role("button", name="Shared links").click()
+        expect(page.get_by_text("1 view")).to_be_visible()
+        shot("demo-12-shared-links", bottom=False)
         page.get_by_role("button", name="Menu").click()
         shot("demo-7-menu", bottom=False)
         page.locator("#main-menu").get_by_role("button", name="Skills and accounts").click()

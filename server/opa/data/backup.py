@@ -145,12 +145,14 @@ def make_safe(url: str) -> dict[str, int]:
         conn.execute("UPDATE jobs SET lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL")
         out["browser_sessions_closed"] = conn.execute(
             "UPDATE browser_sessions SET state = 'stopped', ended_at = now() WHERE state = 'active'").rowcount
+        out["shares_revoked"] = conn.execute(  # a link revoked after the backup must not come back
+            "UPDATE shares SET revoked_at = now(), snapshot = '[]'::jsonb WHERE revoked_at IS NULL").rowcount
         out["connection_requests_expired"] = conn.execute(  # v0.2: an account card from before the backup cannot be confirmed
             "UPDATE connection_requests SET status = 'expired', decided_at = now() WHERE status IN ('pending', 'waiting_for_provider')").rowcount
         for (owner_id,) in conn.execute("SELECT id FROM owners").fetchall():
             conn.execute("INSERT INTO notifications (id, owner_id, type, title, body, created_at) VALUES (%s, %s, 'system.restored', %s, %s, now())",
                          (_ulid(), owner_id, "Restored from a backup",
-                          "Automations are paused and pending approvals were cancelled. Review them, then resume what you still want."))
+                          "Automations are paused, pending approvals were cancelled, and shared links were turned off. Review them, then resume what you still want."))
     return out
 
 

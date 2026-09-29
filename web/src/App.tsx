@@ -8,8 +8,9 @@ import { ArtifactLinks, Files } from "./screens/Files"; // M4
 import { Memory } from "./screens/Memory"; // M4
 import { ConnectionCard } from "./screens/ConnectionCard"; // v0.2 harness
 import { Skills } from "./screens/Skills"; // v0.2 harness
+import { ShareDialog, SharedLinks } from "./screens/Share"; // v0.2 sharing
 
-type Screen = "chat" | "tasks" | "approvals" | "automations" | "browser" | "notifications" | "skills" | "files" | "memory" | "data";
+type Screen = "chat" | "tasks" | "approvals" | "automations" | "browser" | "notifications" | "skills" | "shares" | "files" | "memory" | "data";
 
 const STATE_LABEL: Record<TaskState, string> = {
   queued: "Queued", running: "Running", waiting_approval: "Needs approval", waiting_user: "Needs your reply",
@@ -99,7 +100,7 @@ function Shell({ me: initialMe, onLogout }: { me: Me; onLogout: () => void }) {
   }, [menuOpen]);
   // Chat is the app. Everything else is a place to review what happened, one menu away.
   const more: [Screen, string][] = [["tasks", "Tasks"], ["approvals", "Approvals"], ["automations", "Automations"], ["files", "Files"],
-    ["memory", "Memory"], ["browser", "Browser"], ["notifications", "Notifications"], ["skills", "Skills and accounts"], ["data", "Your data"]];
+    ["memory", "Memory"], ["browser", "Browser"], ["notifications", "Notifications"], ["skills", "Skills and accounts"], ["shares", "Shared links"], ["data", "Your data"]];
   const go = (s: Screen) => { setScreen(s); setMenuOpen(false); };
   const [focusConv, setFocusConv] = useState("");
   const newSideChat = async () => {
@@ -142,6 +143,7 @@ function Shell({ me: initialMe, onLogout }: { me: Me; onLogout: () => void }) {
         {screen === "chat" && notice && <p role={notice.ok ? "status" : "alert"} className={notice.ok ? "notice" : "error"}>{notice.text}</p>}
         {screen === "chat" && <Chat tick={tick} focusConv={focusConv} announce={setLive} onOpenFile={(id) => { setFileFocus(id); setScreen("files"); }} />}
         {screen === "skills" && <Skills me={me} onMe={setMe} tick={tick} announce={setLive} />}
+        {screen === "shares" && <SharedLinks tick={tick} announce={setLive} />}
         {screen === "tasks" && <Tasks tick={tick} />}
         {screen === "approvals" && <Approvals tick={tick} announce={setLive} />}
         {screen === "notifications" && <Notifications tick={tick} />}
@@ -171,6 +173,7 @@ function Chat({ tick, focusConv, announce, onOpenFile }: { tick: number; focusCo
   const [draft, setDraft] = useState("");
   const [replyTo, setReplyTo] = useState<string>("");
   const [error, setError] = useState("");
+  const [sharing, setSharing] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -190,14 +193,22 @@ function Chat({ tick, focusConv, announce, onOpenFile }: { tick: number; focusCo
   return (
     <section className="chat" aria-labelledby="chat-h">
       <h2 id="chat-h" className="sr-only">Chat</h2>
-      {convs.length > 1 && (
+      {(convs.length > 1 || messages.length > 0) && (
         <div className="conv-bar">
-          <label>Conversation{" "}
-            <select value={active} onChange={(e) => setActive(e.target.value)}>
-              {convs.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
-            </select>
-          </label>
+          {convs.length > 1 && (
+            <label>Conversation{" "}
+              <select value={active} onChange={(e) => setActive(e.target.value)}>
+                {convs.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
+              </select>
+            </label>
+          )}
+          <span className="spacer" />
+          {messages.length > 0 && <button className="link" onClick={() => setSharing(true)}>Share</button>}
         </div>
+      )}
+      {sharing && (
+        <ShareDialog conversationId={active} title={convs.find((c) => c.id === active)?.title ?? "Conversation"} messages={messages}
+          announce={announce} onClose={() => setSharing(false)} />
       )}
       {messages.length === 0 && (
         <div className="empty">

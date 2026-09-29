@@ -13,7 +13,7 @@ from sqlalchemy import delete, func, select
 
 from opa.api.actions_service import invalidate_actions, open_actions_for_task
 from opa.api.tasks_service import transition
-from opa.db.models import (TERMINAL_STATES, Action, Approval, Artifact, AuditLog, Automation, BrowserSession, Connection, ConnectionRequest, Conversation, Event,
+from opa.db.models import (TERMINAL_STATES, Action, Approval, Artifact, AuditLog, Automation, BrowserSession, Connection, ConnectionRequest, Conversation, Event, Share,
                            Export, Memory, Notification, OAuthState, Occurrence, Owner, ProviderEvent, Task)
 
 BACKUP_NOTE = ("Backups made before now still contain this data until those backups are deleted. "
@@ -67,6 +67,7 @@ async def erase_owner(sm, settings, clock, owner_id: str, broker=None, browser=N
         await wipe(Action, mine(Action))
         await wipe(Task, mine(Task))  # jobs cascade
         await wipe(ConnectionRequest, mine(ConnectionRequest))
+        await wipe(Share, mine(Share))  # every shared link stops working
         await wipe(Conversation, mine(Conversation))  # messages cascade
         await wipe(Memory, mine(Memory))
         await wipe(Artifact, mine(Artifact))  # versions cascade

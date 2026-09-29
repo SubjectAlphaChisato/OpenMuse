@@ -2366,6 +2366,147 @@
         "title": "SessionOut",
         "type": "object"
       },
+      "ShareCreated": {
+        "properties": {
+          "share": {
+            "$ref": "#/components/schemas/ShareOut"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "share",
+          "url"
+        ],
+        "title": "ShareCreated",
+        "type": "object"
+      },
+      "ShareIn": {
+        "properties": {
+          "expires_in_days": {
+            "default": 7,
+            "enum": [
+              1,
+              7,
+              30
+            ],
+            "title": "Expires In Days",
+            "type": "integer"
+          },
+          "message_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 200,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Ids"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "ShareIn",
+        "type": "object"
+      },
+      "ShareOut": {
+        "properties": {
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_viewed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Viewed At"
+          },
+          "message_count": {
+            "title": "Message Count",
+            "type": "integer"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "expired",
+              "revoked"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "view_count": {
+            "title": "View Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "conversation_id",
+          "title",
+          "message_count",
+          "status",
+          "created_at",
+          "expires_at",
+          "revoked_at",
+          "view_count",
+          "last_viewed_at"
+        ],
+        "title": "ShareOut",
+        "type": "object"
+      },
       "SkillOut": {
         "properties": {
           "builtin": {
@@ -4801,6 +4942,58 @@
         ]
       }
     },
+    "/api/conversations/{conversation_id}/shares": {
+      "post": {
+        "operationId": "create_share_api_conversations__conversation_id__shares_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShareIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Share",
+        "tags": [
+          "shares"
+        ]
+      }
+    },
     "/api/delete-all": {
       "post": {
         "description": "Deletes everything except the account itself. Requires the owner's email address typed exactly.",
@@ -5482,6 +5675,73 @@
         "summary": "Mark Read",
         "tags": [
           "events"
+        ]
+      }
+    },
+    "/api/shares": {
+      "get": {
+        "operationId": "list_shares_api_shares_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ShareOut"
+                  },
+                  "title": "Response List Shares Api Shares Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Shares",
+        "tags": [
+          "shares"
+        ]
+      }
+    },
+    "/api/shares/{share_id}": {
+      "delete": {
+        "operationId": "revoke_share_api_shares__share_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "share_id",
+            "required": true,
+            "schema": {
+              "title": "Share Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Share",
+        "tags": [
+          "shares"
         ]
       }
     },

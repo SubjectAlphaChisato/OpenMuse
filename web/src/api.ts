@@ -24,6 +24,10 @@ export interface ConnectionRequest {
   account_label: string | null; title: string; changes: { capability: string; label: string; before: string; after: string }[];
   note: string; reason: string; status: RequestStatus; result: string | null; confirm_label: string; expires_at: string; created_at: string;
 }
+export interface Share {
+  id: string; conversation_id: string; title: string; message_count: number; status: "active" | "expired" | "revoked";
+  created_at: string; expires_at: string; revoked_at: string | null; view_count: number; last_viewed_at: string | null;
+}
 export type SkillStatus = "ready" | "not_connected" | "off" | "needs_reconnect" | "unavailable" | "disabled";
 export interface Skill {
   name: string; title: string; description: string; summary: string; status: SkillStatus; detail: string; requires: string | null;
@@ -130,6 +134,10 @@ export const api2 = {
   confirmRequest: (id: string) => req<{ request: ConnectionRequest; authorization_url: string | null }>("POST", `/api/connection-requests/${id}/confirm`),
   declineRequest: (id: string) => req<ConnectionRequest>("POST", `/api/connection-requests/${id}/decline`),
   skills: () => req<Skill[]>("GET", "/api/skills"),
+  createShare: (conversationId: string, body: { title: string | null; message_ids: string[] | null; expires_in_days: 1 | 7 | 30 }) =>
+    req<{ share: Share; url: string }>("POST", `/api/conversations/${conversationId}/shares`, body),
+  shares: () => req<Share[]>("GET", "/api/shares"),
+  revokeShare: (id: string) => req<Share>("DELETE", `/api/shares/${id}`),
   setSkill: (name: string, enabled: boolean) => req<Skill>("PATCH", `/api/skills/${name}`, { enabled }),
 };
 

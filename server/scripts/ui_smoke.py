@@ -261,6 +261,27 @@ def _m2(page, snap) -> None:
         print("PASS approval card in the chat shows exact recipients and body; allowed with keyboard only")
 
         expect(page.get_by_role("list", name="Messages").get_by_text("Sent the email to Priya.")).to_be_visible(timeout=10_000)
+
+        # ---- v0.2 sharing: a read-only snapshot link, opened by someone who is not signed in
+        page.get_by_role("button", name="Share").click()
+        dialog = page.get_by_role("dialog", name="Share conversation")
+        expect(dialog.get_by_text("Anyone with the link can read", exact=False)).to_be_visible()
+        snap(page, "7a-share-dialog")
+        dialog.get_by_role("button", name="Create link").click()
+        url = dialog.get_by_label("Share link").input_value()
+        dialog.get_by_role("button", name="Done").click()
+        viewer = page.context.browser.new_context(bypass_csp=True).new_page()  # only so axe-core can be injected; the page itself allows no scripts
+        viewer.goto(url.replace("http://127.0.0.1:8080", f"http://127.0.0.1:{PORT}"))
+        expect(viewer.get_by_text("Sent the email to Priya.")).to_be_visible()
+        expect(viewer.get_by_text("Request: connect")).to_have_count(0)
+        _axe(viewer, "7b-shared-page")
+        viewer.context.close()
+        go(page, "Shared links")
+        expect(page.get_by_text("1 view")).to_be_visible()
+        page.get_by_role("button", name="Turn off").click()
+        expect(page.get_by_text("Turned off", exact=True)).to_be_visible()
+        print("PASS a shared snapshot opens without signing in, leaves out account cards, and can be turned off")
+        go(page, "Chat")
         print("PASS worker dispatched through the broker after approval; task completed")
         snap(page, "7-chat-after-send")
 

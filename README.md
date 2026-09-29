@@ -72,6 +72,10 @@ The API binds to `127.0.0.1:8080` only. The worker has no internet route except 
 
 Every capability is a skill (Gmail, Calendar, Drive, Notion, GitHub, files, memory, automations, the browser, and a daily-brief workflow). The assistant loads a skill when a request needs it. To connect an account or change what the assistant may do, ask in Chat, for example "connect my Notion" or "let the assistant send email": it shows a card, and nothing that adds access happens until you confirm it. The app is chat-first: account cards and approvals appear in the conversation, and everything else (tasks, automations, files, memory, the browser, skills and accounts, your data) is in the Menu. The Skills and accounts screen shows each account's access and each skill's status, and lets you turn skills off; it has no connect or change buttons. You can add your own instruction-only skills with `OPA_SKILLS_DIR`; see `docs/skills.md`.
 
+## Sharing a conversation
+
+Choose **Share** at the top of a chat, pick the messages, and create a link. Anyone with the link can read a frozen, read-only copy of those messages without signing in; later messages never appear, and account cards and files are never included. Links last 1, 7, or 30 days, and **Menu → Shared links** shows views and turns links off. The link is shown once. For people outside your machine to open it, the app must be reachable at `OPA_PUBLIC_BASE_URL` (see the HTTPS guidance above).
+
 ## Connect Google (live mode)
 
 The app only ever requests these scopes, and write scopes only when you allow changes:

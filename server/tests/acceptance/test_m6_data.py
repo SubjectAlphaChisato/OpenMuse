@@ -87,7 +87,8 @@ async def test_delete_all_needs_typed_confirmation_and_removes_everything(client
     body = r.json()
     assert body["deleted"]["tasks"] >= 1 and body["deleted"]["artifacts"] == 1 and body["revocations"][0]["revoked"] is True
     assert "Backups made before now" in body["backup_note"]
-    for path in ("/api/tasks", "/api/approvals", "/api/connections", "/api/automations", "/api/artifacts", "/api/exports", "/api/browser-sessions"):
+    for path in ("/api/tasks", "/api/approvals", "/api/connections", "/api/automations", "/api/artifacts", "/api/exports", "/api/browser-sessions",
+                 "/api/shares"):
         got = await client.get(path)
         assert got.status_code == 200, path
         data = got.json()
@@ -107,6 +108,8 @@ async def test_delete_all_needs_typed_confirmation_and_removes_everything(client
 
 async def test_a16_backup_restores_into_a_clean_deployment_safely(client, make_worker, sessionmaker, settings, clock, broker_client):
     conn, art, auto = await populate(client, make_worker, sessionmaker)
+    shared = await client.post(f"/api/conversations/{await client.default_conversation()}/shares", json={})
+    assert shared.status_code == 201, shared.text
     async with sessionmaker() as db, db.begin():  # one write was mid-flight when the backup ran
         a = (await db.scalars(select(Action))).first()
         await db.execute(update(Action).where(Action.id == a.id).values(state="dispatching"))
@@ -121,6 +124,7 @@ async def test_a16_backup_restores_into_a_clean_deployment_safely(client, make_w
         result = restore(url2, art2, str(work / "b1"), bin_dir=PG_BIN)
         assert result["safety"]["automations_paused"] == 1 and result["safety"]["approvals_invalidated"] == 1
         assert result["safety"]["actions_unknown"] == 1
+        assert result["safety"]["shares_revoked"] == 1  # a link turned off after the backup must not come back
         with pytest.raises(BackupError, match="not empty"):
             restore(url2, str(work / "artifacts3"), str(work / "b1"), bin_dir=PG_BIN)
 

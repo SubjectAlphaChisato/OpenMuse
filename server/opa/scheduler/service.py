@@ -318,3 +318,9 @@ class Scheduler:
             await gc_orphans(self.sm, self.settings, timedelta(minutes=60))
         except Exception:
             log.exception("artifact garbage collection failed")
+        try:
+            from opa.api.routers.shares import clear_expired
+
+            await clear_expired(self.sm, now)  # expired shared snapshots are deleted
+        except Exception:
+            log.exception("clearing expired shares failed")

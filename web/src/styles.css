@@ -137,3 +137,20 @@ ul.skills li + li { border-top: 1px solid #eeeee8; }
 .small { font-size: 13px; }
 .switch { display: flex; gap: 6px; align-items: center; font-size: 14px; color: #555; cursor: pointer; }
 .empty { padding-top: 72px; }
+
+/* v0.2 sharing */
+.conv-bar .spacer { flex: 1; }
+.share-dialog { border: none; border-radius: 14px; padding: 20px 22px; width: min(620px, 92vw); box-shadow: 0 12px 48px #0003; }
+.share-dialog::backdrop { background: #0005; }
+.share-dialog h2 { margin: 0 0 8px; font-size: 20px; }
+.share-dialog input:not([type="checkbox"]) { width: 100%; }
+.share-dialog fieldset { border: 1px solid #e4e4de; border-radius: 10px; margin: 12px 0 4px; padding: 6px 10px; }
+.share-pick { list-style: none; padding: 0; margin: 0; max-height: 260px; overflow: auto; }
+.share-pick li + li { border-top: 1px solid #f0f0ec; }
+.share-pick label { display: flex; gap: 8px; align-items: baseline; padding: 6px 0; cursor: pointer; }
+.share-pick .who { font-weight: 600; font-size: 13px; min-width: 64px; }
+.share-pick .text { color: #333; font-size: 14px; }
+.row { display: flex; gap: 8px; align-items: center; }
+.row.end { justify-content: flex-end; margin-top: 12px; }
+.row .grow { flex: 1; }
+.block { display: block; margin: 8px 0; }

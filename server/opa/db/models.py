@@ -519,3 +519,25 @@ class Export(Base):
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     counts: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = ts_col()
+
+
+class Share(Base):
+    """A read-only snapshot of chosen conversation messages, readable by anyone with the link.
+
+    Only the SHA-256 of the link token is stored; the link is shown once, when created. Revoking or
+    expiring a share clears the snapshot.
+    """
+
+    __tablename__ = "shares"
+    id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    conversation_id: Mapped[str] = mapped_column(ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    snapshot: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
+    message_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    view_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_viewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = ts_col()

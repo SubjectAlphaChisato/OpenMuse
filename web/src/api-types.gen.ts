@@ -660,6 +660,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/conversations/{conversation_id}/shares": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Share */
+        post: operations["create_share_api_conversations__conversation_id__shares_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/delete-all": {
         parameters: {
             query?: never;
@@ -880,6 +897,40 @@ export interface paths {
         /** Mark Read */
         post: operations["mark_read_api_notifications__notification_id__read_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/shares": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Shares */
+        get: operations["list_shares_api_shares_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/shares/{share_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke Share */
+        delete: operations["revoke_share_api_shares__share_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1769,6 +1820,57 @@ export interface components {
             }[];
             /** Version */
             version: number;
+        };
+        /** ShareCreated */
+        ShareCreated: {
+            share: components["schemas"]["ShareOut"];
+            /** Url */
+            url: string;
+        };
+        /** ShareIn */
+        ShareIn: {
+            /**
+             * Expires In Days
+             * @default 7
+             * @enum {integer}
+             */
+            expires_in_days: 1 | 7 | 30;
+            /** Message Ids */
+            message_ids?: string[] | null;
+            /** Title */
+            title?: string | null;
+        };
+        /** ShareOut */
+        ShareOut: {
+            /** Conversation Id */
+            conversation_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Id */
+            id: string;
+            /** Last Viewed At */
+            last_viewed_at: string | null;
+            /** Message Count */
+            message_count: number;
+            /** Revoked At */
+            revoked_at: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "expired" | "revoked";
+            /** Title */
+            title: string;
+            /** View Count */
+            view_count: number;
         };
         /** SkillOut */
         SkillOut: {
@@ -3361,6 +3463,41 @@ export interface operations {
             };
         };
     };
+    create_share_api_conversations__conversation_id__shares_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShareIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareCreated"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     delete_all_api_delete_all_post: {
         parameters: {
             query?: never;
@@ -3852,6 +3989,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NotificationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_shares_api_shares_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareOut"][];
+                };
+            };
+        };
+    };
+    revoke_share_api_shares__share_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                share_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareOut"];
                 };
             };
             /** @description Validation Error */
