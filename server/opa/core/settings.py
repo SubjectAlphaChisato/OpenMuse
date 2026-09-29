@@ -66,6 +66,7 @@ class Settings(BaseSettings):
     calendar_api_base: str = "https://www.googleapis.com/calendar/v3"
     drive_api_base: str = "https://www.googleapis.com/drive/v3"
     oauth_state_ttl_minutes: int = 10
+    skills_dir: str | None = None  # v0.2: extra instruction-only skills (folders with SKILL.md); built-in skills always load
     public_base_url: str = "http://127.0.0.1:8080"  # OAuth callbacks are {public_base_url}/api/oauth/{provider}/callback
 
     # Notion (public integration). The api needs only the client ID; the secret is read by the broker alone.

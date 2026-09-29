@@ -5,10 +5,16 @@ All notable changes are recorded here. Versions follow [Semantic Versioning](htt
 ## Unreleased (v0.2 connectors)
 
 ### Added
+- **Skills harness:** every capability is a skill with a `SKILL.md` (instructions, tools, the account it needs). The model sees a short catalog and loads skills on demand with `skill__load`; loaded skills survive restarts. A daily-brief workflow skill shows how skills combine. Owners can add instruction-only skills with `OPA_SKILLS_DIR` and turn skills off on the new Skills screen. See `docs/skills.md`.
+- **Chat-first app:** the header shows only the assistant, a count of waiting approvals, and a Menu. Account cards and approvals appear inside the conversation. The Connections screen is gone; Skills and accounts shows access read-only. The chat opens with suggestions.
+- **Accounts from the chat:** `connections__list` and `connections__request` let the assistant ask to connect, change, reconnect, or disconnect an account. The request is a card in the chat; connecting, adding access, and disconnecting happen only when the owner confirms it, and reductions apply at once. Provider sign-ins started from a card return to the chat.
 - **Read-only connectors:** Google Drive (search, and Docs/Sheets/Slides exported as Markdown, CSV, and text), Notion (search, pages with nested blocks, data-source queries), and GitHub through a GitHub App (repositories, issue and pull-request search, issues with comments, text files). All provider content is marked untrusted, and the browser's data-sharing approval covers it.
 - A provider registry that declares each connector's capabilities and allowed modes; the API refuses a mode a capability does not support (`mode_not_supported`).
 - Generic OAuth routes (`/api/connectors/{provider}/authorize`, `/api/oauth/{provider}/callback`) and a shared single-flight token manager used by every provider.
 - The Connections screen lists every configured provider and shows only the modes each capability supports.
+
+### Fixed
+- After a provider sign-in, the notice names the right provider (it always said Google), and the add-account list no longer repeats each provider's name.
 
 ## 0.1.0 — unreleased
 

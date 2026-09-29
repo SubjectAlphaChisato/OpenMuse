@@ -1,14 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { api, api2, ApiError, Conversation, Me, Message, Notification, setCsrf, subscribe, Task, TaskState } from "./api";
-import { Approvals } from "./screens/Approvals";
-import { Connections } from "./screens/Connections";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { api, api2, ApiError, Approval, Conversation, Me, Message, Notification, setCsrf, subscribe, Task, TaskState } from "./api";
+import { ApprovalCard, Approvals } from "./screens/Approvals";
 import { Automations } from "./screens/Automations"; // M5
 import { Browser } from "./screens/Browser"; // M6
 import { Data } from "./screens/Data"; // M6
 import { ArtifactLinks, Files } from "./screens/Files"; // M4
 import { Memory } from "./screens/Memory"; // M4
+import { ConnectionCard } from "./screens/ConnectionCard"; // v0.2 harness
+import { Skills } from "./screens/Skills"; // v0.2 harness
 
-type Screen = "chat" | "tasks" | "approvals" | "automations" | "browser" | "notifications" | "connections" | "files" | "memory" | "data";
+type Screen = "chat" | "tasks" | "approvals" | "automations" | "browser" | "notifications" | "skills" | "files" | "memory" | "data";
 
 const STATE_LABEL: Record<TaskState, string> = {
   queued: "Queued", running: "Running", waiting_approval: "Needs approval", waiting_user: "Needs your reply",
@@ -61,29 +62,51 @@ function Login({ onDone }: { onDone: () => void }) {
 function Shell({ me: initialMe, onLogout }: { me: Me; onLogout: () => void }) {
   const [me, setMe] = useState(initialMe);
   const [notice] = useState(() => {
-    // Returning from Google: /?oauth=connected|error&note=...&reason=...
+    // Returning from a provider sign-in: /?oauth=connected|error&provider=Notion&note=...&reason=...
     const q = new URLSearchParams(window.location.search);
     const oauth = q.get("oauth");
     if (!oauth) return null;
     window.history.replaceState(null, "", window.location.pathname);
+    const name = q.get("provider") ?? "The";
     return oauth === "connected"
-      ? { ok: true, text: `Google account connected.${q.get("note") ? " " + q.get("note") : ""}` }
-      : { ok: false, text: q.get("reason") ?? "Google sign-in failed." };
+      ? { ok: true, text: `${name} account connected.${q.get("note") ? " " + q.get("note") : ""}` }
+      : { ok: false, text: q.get("reason") ?? `${name} sign-in failed.` };
   });
-  const [screen, setScreen] = useState<Screen>(notice ? "connections" : "chat");
+  const [screen, setScreen] = useState<Screen>("chat");
+  const [menuOpen, setMenuOpen] = useState(false);
   const [pending, setPending] = useState(0);
   const [tick, setTick] = useState(0);
   const [live, setLive] = useState("");
+  const menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => subscribe((type) => {
     setTick((t) => t + 1);
     if (type === "task.succeeded") setLive("A task finished.");
     if (type === "task.waiting_user") setLive("A task needs your reply.");
     if (type === "task.blocked") setLive("A task is blocked.");
-    if (type === "approval.requested") setLive("An action needs your approval.");
-    if (type === "connection.reauth_required") setLive("A connected account needs reconnecting.");
+    if (type === "approval.requested") setLive("An action needs your approval. It is shown in the chat.");
+    if (type === "connection.reauth_required") setLive("A connected account needs reconnecting. Ask in the chat to reconnect it.");
+    if (type === "connection_request.created") setLive("The assistant is asking about an account. Check the chat.");
   }), []);
   useEffect(() => { api2.approvals().then((a) => setPending(a.length)).catch(() => undefined); }, [tick]);
-  const labels: Record<Screen, string> = { chat: "Chat", tasks: "Tasks", approvals: "Approvals", automations: "Automations", browser: "Browser", notifications: "Notifications", connections: "Connections", files: "Files", memory: "Memory", data: "Your data" };
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (e: MouseEvent | KeyboardEvent) => {
+      if (e instanceof KeyboardEvent ? e.key === "Escape" : !menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", close);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", close); };
+  }, [menuOpen]);
+  // Chat is the app. Everything else is a place to review what happened, one menu away.
+  const more: [Screen, string][] = [["tasks", "Tasks"], ["approvals", "Approvals"], ["automations", "Automations"], ["files", "Files"],
+    ["memory", "Memory"], ["browser", "Browser"], ["notifications", "Notifications"], ["skills", "Skills and accounts"], ["data", "Your data"]];
+  const go = (s: Screen) => { setScreen(s); setMenuOpen(false); };
+  const [focusConv, setFocusConv] = useState("");
+  const newSideChat = async () => {
+    setMenuOpen(false);
+    const title = prompt("Name for the side conversation");
+    if (title) { const c = await api.createConversation(title); setFocusConv(c.id); setScreen("chat"); }
+  };
   const [fileFocus, setFileFocus] = useState<string>(""); // M4: open a file from a chat message
 
   return (
@@ -91,29 +114,40 @@ function Shell({ me: initialMe, onLogout }: { me: Me; onLogout: () => void }) {
       <header className="top">
         <h1 className="brand">{me.assistant_name}</h1>
         {me.mode === "demo" && <span className="badge" aria-label="Demo mode: no real provider calls">DEMO</span>}
-        <nav aria-label="Main">
-          {(Object.keys(labels) as Screen[]).map((s) => (
-            <button key={s} aria-current={screen === s ? "page" : undefined} onClick={() => setScreen(s)}
-              aria-label={s === "approvals" && pending > 0 ? `Approvals, ${pending} waiting` : undefined}>
-              {labels[s]}{s === "approvals" && pending > 0 && <span className="count" aria-hidden="true">{pending}</span>}
+        <span className="spacer" />
+        <nav aria-label="Main" className="main-nav">
+          {screen !== "chat" && <button onClick={() => go("chat")}>Chat</button>}
+          {pending > 0 && (
+            <button className="pill" onClick={() => go("approvals")} aria-label={`Approvals, ${pending} waiting`}>
+              {pending} waiting
             </button>
-          ))}
+          )}
+          <div className="menu" ref={menuRef}>
+            <button aria-expanded={menuOpen} aria-controls="main-menu" onClick={() => setMenuOpen((o) => !o)}>Menu</button>
+            <ul id="main-menu" hidden={!menuOpen}>
+              <li><button onClick={newSideChat}>New side chat</button></li>
+              {more.map(([s, label]) => (
+                <li key={s}><button aria-current={screen === s ? "page" : undefined} onClick={() => go(s)}>{label}</button></li>
+              ))}
+              <li><button onClick={onLogout}>Sign out</button></li>
+            </ul>
+          </div>
         </nav>
-        <button className="link" onClick={onLogout}>Sign out</button>
       </header>
       {me.setup_required.length > 0 && (
         <div role="alert" className="setup">Setup needed: {me.setup_required.join("; ")}</div>
       )}
       <div role="status" aria-live="polite" className="sr-only">{live}</div>
       <main>
-        {screen === "chat" && <Chat tick={tick} onOpenFile={(id) => { setFileFocus(id); setScreen("files"); }} />}
+        {screen === "chat" && notice && <p role={notice.ok ? "status" : "alert"} className={notice.ok ? "notice" : "error"}>{notice.text}</p>}
+        {screen === "chat" && <Chat tick={tick} focusConv={focusConv} announce={setLive} onOpenFile={(id) => { setFileFocus(id); setScreen("files"); }} />}
+        {screen === "skills" && <Skills me={me} onMe={setMe} tick={tick} announce={setLive} />}
         {screen === "tasks" && <Tasks tick={tick} />}
         {screen === "approvals" && <Approvals tick={tick} announce={setLive} />}
         {screen === "notifications" && <Notifications tick={tick} />}
         {screen === "automations" && <Automations me={me} tick={tick} announce={setLive} />}
         {screen === "browser" && <Browser tick={tick} announce={setLive} />}
         {screen === "data" && <Data me={me} tick={tick} announce={setLive} />}
-        {screen === "connections" && <Connections me={me} tick={tick} onMe={setMe} announce={setLive} notice={notice} />}
         {screen === "files" && <Files tick={tick} announce={setLive} focusId={fileFocus || undefined} />}
         {screen === "memory" && <Memory tick={tick} announce={setLive} />}
       </main>
@@ -121,58 +155,87 @@ function Shell({ me: initialMe, onLogout }: { me: Me; onLogout: () => void }) {
   );
 }
 
-function Chat({ tick, onOpenFile }: { tick: number; onOpenFile: (id: string) => void }) {
+const SUGGESTIONS = [
+  "Connect my Google account",
+  "What's on my calendar today?",
+  "Summarize my Notion meeting notes",
+  "Remind me every weekday at 8:00 to review email",
+];
+
+function Chat({ tick, focusConv, announce, onOpenFile }: { tick: number; focusConv: string; announce: (msg: string) => void; onOpenFile: (id: string) => void }) {
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [active, setActive] = useState<string>("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [tasks, setTasks] = useState<Record<string, Task>>({});
+  const [approvals, setApprovals] = useState<Approval[]>([]);
   const [draft, setDraft] = useState("");
   const [replyTo, setReplyTo] = useState<string>("");
   const [error, setError] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => { api.conversations().then((c) => { setConvs(c); setActive((a) => a || c[0]?.id || ""); }); }, [tick]);
-  useEffect(() => {
+  const reload = useCallback(async () => {
     if (!active) return;
-    api.messages(active).then(setMessages);
-    api.tasks().then((r) => setTasks(Object.fromEntries(r.items.map((t) => [t.id, t]))));
-  }, [active, tick]);
-  useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [messages.length]);
+    setMessages(await api.messages(active));
+    setTasks(Object.fromEntries((await api.tasks()).items.map((t) => [t.id, t])));
+    setApprovals(await api2.approvals());
+  }, [active]);
+  useEffect(() => { api.conversations().then((c) => { setConvs(c); setActive((a) => a || c[0]?.id || ""); }); }, [tick, focusConv]);
+  useEffect(() => { if (focusConv) setActive(focusConv); }, [focusConv]);
+  useEffect(() => { void reload(); }, [reload, tick]);
+  useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [messages.length, approvals.length]);
 
   const waiting = Object.values(tasks).filter((t) => t.state === "waiting_user" && t.conversation_id === active);
 
   return (
     <section className="chat" aria-labelledby="chat-h">
       <h2 id="chat-h" className="sr-only">Chat</h2>
-      <div className="conv-bar">
-        <label>Conversation{" "}
-          <select value={active} onChange={(e) => setActive(e.target.value)}>
-            {convs.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
-          </select>
-        </label>
-        <button onClick={async () => {
-          const title = prompt("Name for the side conversation");
-          if (title) { const c = await api.createConversation(title); setConvs([...convs, c]); setActive(c.id); }
-        }}>New side chat</button>
-      </div>
+      {convs.length > 1 && (
+        <div className="conv-bar">
+          <label>Conversation{" "}
+            <select value={active} onChange={(e) => setActive(e.target.value)}>
+              {convs.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
+            </select>
+          </label>
+        </div>
+      )}
+      {messages.length === 0 && (
+        <div className="empty">
+          <p className="hello">What can I help with?</p>
+          <p className="muted">Ask for anything, including connecting your accounts. Changes always wait for your OK.</p>
+          <ul className="suggestions" aria-label="Suggestions">
+            {SUGGESTIONS.map((x) => (
+              <li key={x}><button className="suggestion" onClick={() => { setDraft(x); inputRef.current?.focus(); }}>{x}</button></li>
+            ))}
+          </ul>
+        </div>
+      )}
       <ol className="messages" aria-label="Messages">
         {messages.map((m) => {
           const t = m.task_id ? tasks[m.task_id] : undefined;
-          return (
-            <li key={m.id} className={`msg ${m.role}`}>
+          const asks = m.role === "user" && m.task_id ? approvals.filter((a) => a.task_id === m.task_id) : [];
+          return (<Fragment key={m.id}>
+            <li className={`msg ${m.role}${m.connection_request ? " has-card" : ""}`}>
               <h3 className="sr-only">{m.role === "user" ? "You" : m.role === "system" ? "System" : "Assistant"}</h3>
-              <p>{m.content}</p>
-              {t && m.role === "user" && <TaskChip task={t} />}
+              <p className={m.connection_request ? "sr-only" : undefined}>{m.content}</p>
+              {t && m.role === "user" && t.state !== "succeeded" && <TaskChip task={t} />}
               <ArtifactLinks ids={m.artifact_ids} onOpen={onOpenFile} />
+              {m.connection_request && <ConnectionCard req={m.connection_request} onChanged={async (msg) => { announce(msg); await reload(); }} />}
             </li>
-          );
+            {asks.map((a) => (
+              <li key={a.id} className="msg has-card">
+                <h3 className="sr-only">Approval needed</h3>
+                <ApprovalCard a={a} announce={announce} onDone={reload} />
+              </li>
+            ))}
+          </Fragment>);
         })}
       </ol>
       <div ref={endRef} />
       <form className="composer" onSubmit={async (e) => {
         e.preventDefault(); setError("");
         if (!draft.trim() || !active) return;
-        try { await api.send(active, draft, replyTo || undefined); setDraft(""); setReplyTo(""); setMessages(await api.messages(active)); }
+        try { await api.send(active, draft, replyTo || undefined); setDraft(""); setReplyTo(""); await reload(); }
         catch (err) { setError(err instanceof ApiError ? err.message : "Send failed"); }
       }}>
         {waiting.length > 0 && (
@@ -185,10 +248,10 @@ function Chat({ tick, onOpenFile }: { tick: number; onOpenFile: (id: string) => 
           </label>
         )}
         <label className="grow"><span className="sr-only">Message</span>
-          <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={2}
+          <textarea ref={inputRef} value={draft} onChange={(e) => setDraft(e.target.value)} rows={2} placeholder="Message your assistant"
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); (e.currentTarget.form as HTMLFormElement).requestSubmit(); } }} />
         </label>
-        <button type="submit" disabled={!active}>Send</button>
+        <button type="submit" className="primary" disabled={!active}>Send</button>
         {error && <p role="alert" className="error">{error}</p>}
       </form>
     </section>

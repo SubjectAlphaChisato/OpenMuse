@@ -220,3 +220,70 @@ def test_new_connector_results_count_as_private_context_for_the_browser():
     messages = [{"role": "assistant", "content": [{"type": "tool_use", "id": "t1", "name": "notion__read_page", "input": {}}]},
                 {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "secret roadmap codename Nightingale"}]}]
     assert private_texts(messages, "") == ["secret roadmap codename Nightingale"]
+
+
+# ------------------------------------------------------------------ v0.2 harness: connecting from the chat
+
+
+async def test_connecting_notion_from_a_chat_card_signs_in_and_returns_to_the_chat(client, fakes, make_worker, sessionmaker):
+    conv = await client.default_conversation()
+    await client.submit(conv, "connect my notion", "r1")
+    req = {"action": "connect", "provider": "notion", "connection_id": None, "modes": None, "reason": "To read your meeting notes."}
+    assert await make_worker(script({"tool_calls": [{"name": "connections__request", "input": req}]}, {"text": "Confirm the card."})).run_once()
+    card = next(m["connection_request"] for m in (await client.get(f"/api/conversations/{conv}/messages")).json() if m["connection_request"])
+    assert card["confirm_label"] == "Continue to Notion" and (await client.get("/api/connections")).json() == []
+
+    r = await client.post(f"/api/connection-requests/{card['id']}/confirm")
+    assert r.status_code == 200, r.text
+    assert r.json()["request"]["status"] == "waiting_for_provider"
+    url = r.json()["authorization_url"]
+    assert url.startswith("https://api.notion.com/v1/oauth/authorize?")
+    r = await client.get(fakes["notion"].consent(url))
+    loc = parse_qs(urlparse(r.headers["location"]).query)
+    assert loc["oauth"] == ["connected"] and loc["view"] == ["chat"] and loc["provider"] == ["Notion"]
+    card = next(m["connection_request"] for m in (await client.get(f"/api/conversations/{conv}/messages")).json() if m["connection_request"])
+    assert card["status"] == "completed" and card["result"].startswith("Connected ")
+    [conn] = (await client.get("/api/connections")).json()
+    assert conn["provider"] == "notion" and conn["modes"] == {"notion": "read_only"}
+
+
+async def test_turning_drive_on_from_chat_asks_google_for_the_scope_first(client, fakes, make_worker):
+    conn, _ = await sign_in(client, fakes, "google")
+    conv = await client.default_conversation()
+    await client.submit(conv, "read my roadmap doc", "r1")
+    req = {"action": "change", "provider": "google", "connection_id": None, "modes": {"drive": "read_only"}, "reason": "The roadmap is in Drive."}
+    assert await make_worker(script({"tool_calls": [{"name": "connections__request", "input": req}]}, {"text": "Confirm the card."})).run_once()
+    card = next(m["connection_request"] for m in (await client.get(f"/api/conversations/{conv}/messages")).json() if m["connection_request"])
+    assert card["changes"] == [{"capability": "drive", "label": "Drive and Docs", "before": "off", "after": "read_only"}]
+
+    r = await client.post(f"/api/connection-requests/{card['id']}/confirm")
+    assert r.status_code == 200 and r.json()["request"]["status"] == "waiting_for_provider"
+    url = r.json()["authorization_url"]
+    assert DRIVE_READ in parse_qs(urlparse(url).query)["scope"][0]
+    assert (await client.get("/api/connections")).json()[0]["modes"]["drive"] == "off"  # not until Google grants it
+    r = await client.get(fakes["google"].consent(url))
+    assert parse_qs(urlparse(r.headers["location"]).query)["view"] == ["chat"]
+    modes = (await client.get("/api/connections")).json()[0]["modes"]
+    assert modes == {"gmail": "read_only", "calendar": "read_only", "drive": "read_only"}
+
+
+async def test_reconnecting_from_chat_keeps_the_account_and_its_access(client, fakes, make_worker, sessionmaker):
+    from opa.db.models import Connection
+
+    conn, _ = await sign_in(client, fakes, "notion")
+    async with sessionmaker() as db, db.begin():
+        (await db.get(Connection, conn["id"])).status = "reauth_required"
+    skills = {s["name"]: s for s in (await client.get("/api/skills")).json()}
+    assert skills["notion"]["status"] == "needs_reconnect"
+    conv = await client.default_conversation()
+    await client.submit(conv, "reconnect notion", "r1")
+    req = {"action": "reconnect", "provider": "notion", "connection_id": None, "modes": None, "reason": "Notion asked to sign in again."}
+    assert await make_worker(script({"tool_calls": [{"name": "connections__request", "input": req}]}, {"text": "Confirm the card."})).run_once()
+    card = next(m["connection_request"] for m in (await client.get(f"/api/conversations/{conv}/messages")).json() if m["connection_request"])
+    assert card["title"].startswith("Reconnect ") and card["changes"] == []
+    r = await client.post(f"/api/connection-requests/{card['id']}/confirm")
+    assert r.status_code == 200 and r.json()["request"]["status"] == "waiting_for_provider"
+    r = await client.get(fakes["notion"].consent(r.json()["authorization_url"]))
+    assert parse_qs(urlparse(r.headers["location"]).query)["view"] == ["chat"]
+    [after] = (await client.get("/api/connections")).json()
+    assert after["id"] == conn["id"] and after["status"] == "connected" and after["modes"] == {"notion": "read_only"}

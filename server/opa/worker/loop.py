@@ -23,13 +23,14 @@ from opa.broker.client import BrokerClient, BrokerUnavailable
 from opa.core.clock import Clock, SystemClock
 from opa.core.ids import new_id
 from opa.core.settings import Settings
-from opa.db.models import Action, Approval, Conversation, Job, Owner, Task
+from opa.db.models import Action, Approval, Connection, Conversation, Job, Owner, Task
 from opa.db.outbox import emit
 from opa.memory.retrieval import assemble as assemble_memory
 from opa.sdk.contract import ConnectorError, ToolRequest
 from opa.worker.model import GenerateResult, ModelAdapter
 from opa.worker.output_tools import OutputTools, latest_owner_message
 from opa.worker.tools import LocalTools
+from opa.skills import harness as skill_harness
 
 log = logging.getLogger("opa.worker")
 
@@ -74,6 +75,7 @@ class Worker:
         from opa.worker.browser_tools import BrowserTools
 
         self.browser_tools = BrowserTools(sessionmaker, self.clock, browser)  # M6: restricted public browsing
+        self.skills = skill_harness.library_for(settings.skills_dir)  # v0.2: every capability is a skill
 
     # ---------- lifecycle ----------
     def stop(self) -> None:
@@ -184,8 +186,11 @@ class Worker:
                                            self.settings.memory_context_chars)
             task.injected_memory_ids = memory.ids
             task.checkpoint = {**task.checkpoint, "injected_memory_ids": memory.ids}
-            system = SYSTEM_PROMPT + (f"\n\n{memory.block}" if memory.block else "")
             state["memory_block"] = memory.block or ""
+            # v0.2 harness: skill statuses come from the owner's accounts and settings at the start of the run.
+            conns = list(await db.scalars(select(Connection).where(Connection.owner_id == task.owner_id, Connection.status != "disconnected")))
+            catalog = skill_harness.statuses(self.skills, self.settings, conns, skill_harness.disabled_skills(owner), self.browser_tools.client is not None)
+            loaded_before = list(ck.get("loaded_skills") or [])
 
         broker_tools: dict[str, dict[str, Any]] = {}
         if self.broker is not None:
@@ -194,7 +199,10 @@ class Worker:
                     broker_tools[t["name"]] = t
             except (BrokerUnavailable, ConnectorError) as e:
                 log.warning("broker tools unavailable: %s", e)
-        tool_defs = self.tools.definitions() + self.outputs.definitions() + self.browser_tools.definitions() + [{"name": t["name"], "description": t["description"], "input_schema": t["input_schema"]} for t in broker_tools.values()]
+        all_defs = self.tools.definitions() + self.outputs.definitions() + self.browser_tools.definitions() + [{"name": t["name"], "description": t["description"], "input_schema": t["input_schema"]} for t in broker_tools.values()]
+        skills = skill_harness.TaskSkills(self.skills, catalog, all_defs, loaded_before)
+        state["skills"] = skills
+        system = SYSTEM_PROMPT + "\n\n" + skills.system_block() + (f"\n\n{memory.block}" if memory.block else "")
 
         try:
             if pending:
@@ -213,7 +221,8 @@ class Worker:
                 if (time.monotonic() - started) > limits.get("max_active_seconds", 600) * mult:
                     raise Blocked("budget_exceeded", "active runtime budget reached")
 
-                result: GenerateResult = await self.model.generate(messages, tool_defs, {**limits, "task_id": task_id}, system=system)
+                # Only core tools and loaded skills are offered; the scripted test model may resolve "@auto" against every tool.
+                result: GenerateResult = await self.model.generate(messages, skills.offered(), {**limits, "task_id": task_id, "catalog_tools": all_defs}, system=system)
                 usage["model_calls"] = usage.get("model_calls", 0) + 1
                 usage["input_tokens"] = usage.get("input_tokens", 0) + result.usage.get("input_tokens", 0)
                 usage["output_tokens"] = usage.get("output_tokens", 0) + result.usage.get("output_tokens", 0)
@@ -241,6 +250,14 @@ class Worker:
                 browser_paused = False
                 for call in result.tool_calls:
                     usage["tool_dispatches"] = usage.get("tool_dispatches", 0) + 1
+                    if call.name == "skill__load":
+                        outcome = skills.load(str(call.input.get("name", "")))
+                        results.append({"type": "tool_result", "tool_use_id": call.id, "content": outcome["content"], "is_error": not outcome["ok"]})
+                        continue
+                    refused = skills.admit(call.name)
+                    if refused:
+                        results.append(self._err(call.id, "skill_not_ready", refused))
+                        continue
                     if call.name in self.browser_tools.names:
                         outcome = await self.browser_tools.execute(call.name, dict(call.input), owner_id=state["owner_id"], task_id=task_id, token=token,
                                                                    messages=messages, memory_block=state.get("memory_block", ""))
@@ -411,6 +428,8 @@ class Worker:
         if clear_pending:
             ck.pop("pending_action", None)
         ck.update({"messages": state["messages"], "outputs": state["outputs"], "step": f"model_call_{state['usage'].get('model_calls', 0)}"})
+        if state.get("skills") is not None:
+            ck["loaded_skills"] = list(state["skills"].loaded)
         if extra:
             ck.update(extra)
         task.checkpoint = ck

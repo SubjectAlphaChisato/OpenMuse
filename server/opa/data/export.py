@@ -22,7 +22,7 @@ from opa.artifacts.storage import ArtifactStore
 from opa.core.canonical import sha256_hex
 from opa.core.clock import Clock
 from opa.core.settings import Settings
-from opa.db.models import (Action, Approval, Artifact, ArtifactVersion, AuditLog, Automation, BrowserSession, Connection, Conversation,
+from opa.db.models import (Action, Approval, Artifact, ArtifactVersion, AuditLog, Automation, BrowserSession, Connection, ConnectionRequest, Conversation,
                            Export, Memory, Message, Notification, Occurrence, Owner, Task)
 
 EXPORT_VERSION = "1"
@@ -45,6 +45,8 @@ ENTITIES: dict[str, tuple[Any, list[str]]] = {
                                  "enabled", "confirmed_at", "created_by", "paused_reason", "next_run_at", "last_run_at", "completed_at", "created_at"]),
     "automation_runs": (Occurrence, ["automation_id", "scheduled_for", "state", "task_id", "late", "missed_count", "created_at"]),
     "connections": (Connection, ["id", "provider", "account_label", "status", "modes", "granted_scopes", "authorized_at", "created_at"]),
+    "connection_requests": (ConnectionRequest, ["id", "conversation_id", "task_id", "action", "provider", "connection_id", "modes", "reason",
+                                                "status", "result", "expires_at", "decided_at", "created_at"]),
     "browser_sessions": (BrowserSession, ["id", "task_id", "state", "control", "urls_visited", "created_at", "ended_at"]),
     "notifications": (Notification, ["id", "type", "title", "body", "task_id", "read_at", "created_at"]),
     "activity_log": (AuditLog, ["id", "actor", "type", "subject_id", "sanitized", "created_at"]),

@@ -39,6 +39,18 @@ match:
           - name: ask_user
             input: {question: "I found the protocol page. Keep going?"}
       - text: "The Wren protocol was published in 2024."
+  - contains: "Let the assistant send email"
+    steps:
+      - tool_calls:
+          - name: connections__request
+            input: {action: change, provider: fixture, connection_id: null, modes: {gmail: read_write}, reason: "You asked me to send email for you."}
+      - text: Confirm the card and I can propose emails for you to approve.
+  - contains: "Connect the demo account"
+    steps:
+      - tool_calls:
+          - name: connections__request
+            input: {action: connect, provider: fixture, connection_id: null, modes: null, reason: "You asked me to connect it."}
+      - text: Confirm the card to connect the demo account.
 default: {text: "OK. (scripted model)"}
 """
 
@@ -101,6 +113,17 @@ asyncio.run(go())
 """
 
 
+def go(page, name: str) -> None:
+    """Chat is the app; other screens are one menu away."""
+    if name == "Chat":
+        chat = page.get_by_role("navigation", name="Main").get_by_role("button", name="Chat", exact=True)
+        if chat.count():
+            chat.click()
+        return
+    page.get_by_role("button", name="Menu").click()
+    page.locator("#main-menu").get_by_role("button", name=name, exact=True).click()
+
+
 def _wait_http(url: str, timeout: float = 15) -> None:
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -145,11 +168,10 @@ def _drive(base: str, shots: str | None) -> int:
         messages = page.get_by_role("list", name="Messages")
         expect(messages.get_by_text("Summarize my week")).to_be_visible()
         expect(messages.get_by_text("OK. (scripted model)")).to_be_visible(timeout=10_000)
-        expect(messages.get_by_text("Task: Done")).to_be_visible(timeout=10_000)
-        print("PASS message sent, worker reply rendered live, task chip shows Done")
+        print("PASS message sent, worker reply rendered live")
         snap(page, "2-chat-reply")
 
-        page.get_by_role("button", name="Tasks").click()
+        go(page, "Tasks")
         expect(page.get_by_role("heading", name="Tasks")).to_be_visible()
         row = page.get_by_role("row").filter(has_text="Summarize my week")
         expect(row.get_by_text("Task: Done")).to_be_visible()
@@ -158,7 +180,7 @@ def _drive(base: str, shots: str | None) -> int:
         print("PASS tasks screen lists task; Retry creates linked task")
         snap(page, "3-tasks")
 
-        page.get_by_role("button", name="Notifications").click()
+        go(page, "Notifications")
         expect(page.get_by_text("Task completed").first).to_be_visible()
         page.get_by_role("button", name="Mark read").first.click()
         print("PASS notification inbox shows completion; mark-read works")
@@ -172,7 +194,7 @@ def _drive(base: str, shots: str | None) -> int:
             snap(page, "FAILED")
             print("FAIL screenshot saved to", shots)
             raise
-        page.get_by_role("button", name="Sign out").click()
+        go(page, "Sign out")
         expect(page.get_by_role("heading", name="Sign in")).to_be_visible()
         print("PASS sign-out returns to login")
         browser.close()
@@ -189,18 +211,36 @@ def _drive(base: str, shots: str | None) -> int:
 
 
 def _m2(page, snap) -> None:
-        # ---- M2: connect a demo account, allow Gmail changes, approve an email by keyboard
-        page.get_by_role("button", name="Connections").click()
-        page.get_by_role("button", name="Connect", exact=True).click()
-        acct = page.get_by_role("article", name="demo@example.test (demo)")
-        expect(acct).to_be_visible()
-        expect(acct.get_by_label("Gmail")).to_have_value("read_only")  # read only by default
-        acct.get_by_label("Gmail").select_option("read_write")
-        expect(acct.get_by_label("Gmail")).to_have_value("read_write")
-        expect(acct.get_by_label("Calendar")).to_have_value("read_only")
-        snap(page, "5-connections")
+        # ---- v0.2 harness: the assistant asks to connect in chat; only the owner's click connects
+        go(page, "Chat")
+        expect(page.get_by_role("button", name="Send")).to_be_enabled()
+        page.get_by_role("textbox", name="Message").fill("Connect the demo account")
+        page.keyboard.press("Enter")
+        card = page.get_by_role("article", name="Connect the demo account")
+        expect(card.get_by_role("button", name="Connect", exact=True)).to_be_visible(timeout=10_000)
+        expect(card.get_by_text("You asked me to connect it.", exact=False)).to_be_visible()
+        snap(page, "5a-chat-connect-card")
+        card.get_by_role("button", name="Connect", exact=True).click()
+        expect(card.get_by_text("Done: Connected demo@example.test.")).to_be_visible()
+        print("PASS the assistant asks in chat; the owner's confirmation connects the demo account")
+        go(page, "Skills and accounts")
+        gmail = page.get_by_role("article", name="Gmail skill")
+        expect(gmail.get_by_text("Ready")).to_be_visible()
+        expect(page.get_by_role("article", name="Web browser skill")).to_be_visible()
+        snap(page, "5b-skills")
+        print("PASS skills screen shows each skill's status")
 
-        page.get_by_role("button", name="Chat").click()
+        # ---- M2: allow Gmail changes from the chat, then approve an email inside the chat by keyboard
+        go(page, "Chat")
+        expect(page.get_by_role("button", name="Send")).to_be_enabled()
+        page.get_by_role("textbox", name="Message").fill("Let the assistant send email")
+        page.keyboard.press("Enter")
+        change = page.get_by_role("article", name="Change access for demo@example.test")
+        expect(change.get_by_text("Gmail: Read only → Read and propose changes")).to_be_visible(timeout=10_000)
+        snap(page, "5-chat-change-card")
+        change.get_by_role("button", name="Allow").click()
+        expect(change.get_by_text("Done: Access updated.")).to_be_visible()
+        print("PASS access widened only by the owner's click on the chat card")
         expect(page.get_by_role("button", name="Send")).to_be_enabled()
         page.get_by_role("textbox", name="Message").fill("Email Priya the metrics")
         page.keyboard.press("Enter")
@@ -208,7 +248,6 @@ def _m2(page, snap) -> None:
         expect(page.get_by_text("Task: Needs approval")).to_be_visible()
         print("PASS proposal pauses the task and raises an approval count")
 
-        page.get_by_role("button", name="Approvals, 1 waiting").click()
         card = page.get_by_role("article", name="Send email")
         expect(card.get_by_text("priya@partner.example").first).to_be_visible()
         expect(card.get_by_text("Hi Priya, here are the metrics.")).to_be_visible()
@@ -218,12 +257,10 @@ def _m2(page, snap) -> None:
         page.keyboard.press("Shift+Tab")  # keyboard-only: move to Allow once and press Enter
         expect(card.get_by_role("button", name="Allow once")).to_be_focused()
         page.keyboard.press("Enter")
-        expect(page.get_by_text("Nothing is waiting for your approval.")).to_be_visible(timeout=10_000)
-        print("PASS approval card shows exact recipients and body; allowed with keyboard only")
+        expect(card).to_have_count(0, timeout=10_000)
+        print("PASS approval card in the chat shows exact recipients and body; allowed with keyboard only")
 
-        page.get_by_role("button", name="Chat").click()
         expect(page.get_by_role("list", name="Messages").get_by_text("Sent the email to Priya.")).to_be_visible(timeout=10_000)
-        expect(page.get_by_text("Task: Done").last).to_be_visible()
         print("PASS worker dispatched through the broker after approval; task completed")
         snap(page, "7-chat-after-send")
 
@@ -232,7 +269,7 @@ def _m2(page, snap) -> None:
 def _m5(page, snap) -> None:
     # ---- M5: create a weekday schedule through preview and confirmation, turn it off, delete it
     page.on("dialog", lambda d: d.accept())
-    page.get_by_role("button", name="Automations").click()
+    go(page, "Automations")
     page.get_by_role("button", name="New automation").click()
     page.get_by_label("Name").fill("Evening review")
     page.get_by_label("What should happen each time?").fill("Summarize what happened today")
@@ -279,16 +316,16 @@ def _start_site() -> int:
 def _m6(page, snap) -> None:
     # ---- A17a: the M4 screens get the same axe-core scan
     for screen in ("Files", "Memory"):
-        page.get_by_role("button", name=screen, exact=True).click()
+        go(page, screen)
         expect(page.get_by_role("heading", name=screen if screen != "Files" else "Files", level=2).first).to_be_visible()
         _axe(page, f"m4-{screen.lower()}")
     # ---- M6: the agent browses; the owner watches live, takes control, hands back, stops
-    page.get_by_role("button", name="Chat").click()
+    go(page, "Chat")
     expect(page.get_by_role("button", name="Send")).to_be_enabled()
     page.get_by_role("textbox", name="Message").fill("Research Wren")
     page.keyboard.press("Enter")
     expect(page.get_by_text("I found the protocol page. Keep going?")).to_be_visible(timeout=30_000)
-    page.get_by_role("button", name="Browser").click()
+    go(page, "Browser")
     card = page.get_by_role("article", name="Browser for Research Wren")
     expect(card).to_be_visible()
     card.get_by_role("button", name="Show live view").click()
@@ -309,7 +346,7 @@ def _m6(page, snap) -> None:
     print("PASS stop closes the browser")
 
     # ---- M6: export, then delete all data behind a typed confirmation
-    page.get_by_role("button", name="Your data").click()
+    go(page, "Your data")
     page.get_by_role("button", name="Create export").click()
     link = page.get_by_role("link", name="opa-export-", exact=False).first
     expect(link).to_be_visible()

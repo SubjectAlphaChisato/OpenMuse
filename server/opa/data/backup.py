@@ -145,6 +145,8 @@ def make_safe(url: str) -> dict[str, int]:
         conn.execute("UPDATE jobs SET lease_owner = NULL, lease_token = NULL, lease_expires_at = NULL")
         out["browser_sessions_closed"] = conn.execute(
             "UPDATE browser_sessions SET state = 'stopped', ended_at = now() WHERE state = 'active'").rowcount
+        out["connection_requests_expired"] = conn.execute(  # v0.2: an account card from before the backup cannot be confirmed
+            "UPDATE connection_requests SET status = 'expired', decided_at = now() WHERE status IN ('pending', 'waiting_for_provider')").rowcount
         for (owner_id,) in conn.execute("SELECT id FROM owners").fetchall():
             conn.execute("INSERT INTO notifications (id, owner_id, type, title, body, created_at) VALUES (%s, %s, 'system.restored', %s, %s, now())",
                          (_ulid(), owner_id, "Restored from a backup",

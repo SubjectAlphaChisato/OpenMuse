@@ -13,6 +13,7 @@ Last updated: 2026-09-28 (v0.2 read-only connectors) • Spec: `docs/open-muse-i
 | M5 Automation | **Implemented and verified locally** (fixture provider; calendar sync also against the fake Google; see M5 evidence below) |
 | M6 Browser and release | **Implemented, packaged, and verified locally.** All automated release gates pass (`scripts/release_check.py`). Manual gates still open: A17b screen-reader pass, a Docker Compose build and run, live Google and Claude checks (see `docs/RELEASING.md`) |
 | v0.2 Read-only connectors | **Implemented; live verification pending credentials.** Google Drive, Notion, and GitHub (GitHub App), read only. Verified against in-process fakes of each provider's HTTP API and the demo account, not the real services (see v0.2 evidence below) |
+| v0.2 Skills harness | **Implemented and verified locally** (fixture provider and fakes). Every capability is a skill loaded on demand; accounts are connected, changed, and disconnected from the chat with owner confirmation (see skills evidence below) |
 
 ## Requirement status
 
@@ -118,8 +119,16 @@ Totals on 2026-09-28 after release packaging: 237 pytest cases pass (206 through
 - `test_v02_demo.py`: the demo account runs Drive, Notion, and GitHub tools through the worker, including a Notion page carrying a prompt-injection line that stays marked untrusted.
 - Eight code mutations (dropping the version header, skipping refresh, unescaped Drive query, ignoring `next_cursor`, and others) were each caught by the suite and reverted. Full suite: 250 passed; lint clean; web type check and build pass.
 
+## v0.2 skills harness verification
+
+- `tests/acceptance/test_v02_skills.py` (11 tests): every tool has exactly one built-in skill; owner skills cannot declare tools or shadow built-ins; the model starts with only core tools and the catalog, and gets a skill's tools after loading it (read-only access withholds write tools); a workflow skill loads its dependencies; calling an unloaded skill's tool loads it; a disabled skill is hidden and refused without changing account access; skill status follows accounts; connecting, widening, and disconnecting wait for the owner's confirmation; reductions apply at once; requests are validated, superseded only for overlapping capabilities, owner-bound, single-use, and expire; the model's reason never changes what is confirmed.
+- `test_v02_connectors.py`: connecting Notion from a chat card signs in through the fake Notion and returns to the chat; turning Drive on from chat asks Google for the scope first.
+- UI smoke (chat-first layout): the assistant asks in chat and the owner's click connects the demo account; widening Gmail access and approving the email both happen inside the chat, by keyboard for the approval; every other screen is reached through the Menu; axe-core found no serious or critical violations.
+- Reconnecting from a chat card keeps the same account and access (`test_reconnecting_from_chat_keeps_the_account_and_its_access`).
+
 ## Not verified / known limitations
 
+- Skills harness: the assistant only sees a skill's instructions after loading it, so a real model may occasionally skip loading and call a tool directly (the harness then loads it). Tasks do not resume on their own after the owner confirms a connection; the owner asks again. Skills are read from disk at worker start-up; changes to `OPA_SKILLS_DIR` need a restart.
 - v0.2: no real Drive, Notion, or GitHub API has been called. GitHub token revocation sends HTTP Basic client authentication, which GitHub's example omits; verify live. The GitHub App install link (`OPA_GITHUB_APP_SLUG`) is configuration only; the UI does not yet guide installation. Notion page reading stops at nesting depth 2 and 400 blocks, and says so. Drive reads Google Docs, Sheets, Slides, and plain-text files only. None of the three has write tools, and automations cannot yet trigger on their changes.
 - M6: the live view sends screenshots about three times a second rather than a CDP screencast, so it is not smooth video. Owner input during takeover is clicks, typed text, a fixed set of keys, and scrolling. Page JavaScript runs (sites need it) but cannot reach private addresses; the agent itself cannot run scripts. The data-sharing check looks for 12-character runs and email addresses of private context in the URL path and query; it can miss paraphrased or re-encoded data and can over-trigger on common phrases. Browser sessions live in the browser service's memory, so restarting it ends them (the worker opens a fresh one). Export is built synchronously in the request. Backup needs PostgreSQL 16 client tools; the Compose image installs them from the PGDG repository, which has not been built. Restore requires an empty database and file directory.
 - **Docker Compose has not been run.** Docker is not installed on the development machine. `deploy/compose.yaml` parses and its anchors resolve, but images have not been built.

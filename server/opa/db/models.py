@@ -112,6 +112,7 @@ class Message(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     task_id: Mapped[str | None] = mapped_column(String(26), index=True)
     artifact_ids: Mapped[list[str]] = mapped_column(ARRAY(String), default=list, nullable=False)
+    connection_request_id: Mapped[str | None] = mapped_column(String(26))  # v0.2: an in-chat connect/change/disconnect card
     client_request_id: Mapped[str | None] = mapped_column(String(128))
     content_hash: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = ts_col()
@@ -245,8 +246,34 @@ class OAuthState(Base):
     scopes: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False)
     target_connection_id: Mapped[str | None] = mapped_column(String(26))
     requested_modes: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    connection_request_id: Mapped[str | None] = mapped_column(String(26))  # set when the sign-in started from a chat card
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = ts_col()
+
+
+class ConnectionRequest(Base):
+    """An account change the assistant asked for in chat (connect, change access, disconnect).
+
+    The assistant can only create these. Anything that adds access, and every disconnect, happens only
+    when the owner confirms the card through the authenticated API; reductions apply at once.
+    """
+
+    __tablename__ = "connection_requests"
+    id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    conversation_id: Mapped[str] = mapped_column(ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False)
+    task_id: Mapped[str | None] = mapped_column(String(26))
+    action: Mapped[str] = mapped_column(String(16), nullable=False)  # connect | change | reconnect | disconnect
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    connection_id: Mapped[str | None] = mapped_column(String(26))
+    modes: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # pending | waiting_for_provider | completed | declined | expired | superseded | failed
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending")
+    result: Mapped[str | None] = mapped_column(Text)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = ts_col()
 
 

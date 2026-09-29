@@ -79,3 +79,61 @@ textarea { width: 100%; }
 .card.danger { border-left: 4px solid #b3261e; }
 .top nav { flex-wrap: wrap; }
 h1.brand { font-size: 1rem; margin: 0; font-weight: 700; }
+
+/* v0.2 harness: account requests in chat, and the Skills screen */
+.msg .card.request { margin-top: 0.5rem; max-width: 36rem; border-left: 4px solid #2f5fb3; }
+.msg .card.request h4 { margin: 0 0 0.25rem; }
+.card.request.r-completed { border-left-color: #2e7d32; }
+.card.request.r-declined, .card.request.r-expired, .card.request.r-superseded { border-left-color: #8a8a8a; }
+.card.request .changes { margin: 0.25rem 0; padding-left: 1.25rem; }
+.card.request .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.card.request .actions p { flex-basis: 100%; margin: 0; }
+ul.skills { list-style: none; padding: 0; display: grid; gap: 0.75rem; }
+ul.skills h3 { display: flex; gap: 0.5rem; align-items: center; margin: 0 0 0.25rem; font-size: 1.05rem; }
+.chip.k-ready { background: #e3f2e5; color: #1b5e20; }
+.chip.k-not_connected, .chip.k-off, .chip.k-needs_reconnect { background: #fff4e0; color: #7a4a00; }
+.chip.k-unavailable, .chip.k-disabled { background: #eee; color: #444; }
+
+/* Chat-first layout: a quiet header, one menu, and cards inside the conversation */
+.shell { max-width: 820px; }
+.top { border-bottom: none; padding: 8px 0 16px; }
+.top .brand { font-size: 20px; margin: 0; }
+.top .spacer { flex: 1; }
+.main-nav { display: flex; gap: 8px; align-items: center; margin-left: 0 !important; }
+.main-nav > button, .menu > button { border-color: #d6d6d0; }
+.pill { background: #fff4ce; border-color: #e0c060 !important; font-weight: 600; }
+.menu { position: relative; }
+.menu ul { position: absolute; right: 0; top: calc(100% + 6px); z-index: 10; list-style: none; margin: 0; padding: 6px; min-width: 200px;
+  background: #fff; border: 1px solid #ddd; border-radius: 10px; box-shadow: 0 6px 24px #0002; display: grid; gap: 2px; }
+.menu ul[hidden] { display: none; }
+.menu ul button { width: 100%; text-align: left; border: none; background: none; padding: 8px 10px; border-radius: 6px; }
+.menu ul button:hover, .menu ul button[aria-current="page"] { background: #f0f0ec; color: inherit; }
+.conv-bar { justify-content: flex-end; margin: 0 0 8px; font-size: 14px; color: #555; }
+.conv-bar .link { color: #555; font-size: 14px; }
+.empty { text-align: center; padding: 48px 0 24px; }
+.empty .hello { font-size: 26px; font-weight: 600; margin: 0 0 6px; }
+.suggestions { list-style: none; padding: 0; margin: 20px auto 0; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 560px; }
+.suggestion { border: 1px solid #d6d6d0; border-radius: 18px; padding: 8px 14px; background: #fff; color: #333; }
+.suggestion:hover { background: #f0f0ec; }
+.msg { line-height: 1.45; }
+.msg.user { background: #1a1a1a; color: #fff; }
+.msg.user .chip { background: #ffffff26; color: #fff; }
+.msg.assistant { border-color: #e4e4de; }
+.msg.has-card { background: none; border: none; padding: 0; max-width: 100%; width: 100%; }
+.msg .card.request, .msg .card.approval { margin: 6px 0 0; padding: 16px 18px; box-shadow: 0 1px 3px #0001; border: 1px solid #e4e4de; white-space: normal; }
+.card.request h4, .card.approval h3 { margin: 0 0 4px; font-size: 16px; }
+.composer textarea { border-color: #d6d6d0; border-radius: 12px; padding: 10px 12px; resize: none; }
+.accounts { list-style: none; padding: 0; display: grid; gap: 8px; }
+.accounts li { background: #fff; border: 1px solid #e4e4de; border-radius: 10px; padding: 12px 14px; }
+.skills-page ul.skills .card { padding: 12px 16px; margin: 0; }
+.skills-page ul.skills p { margin: 4px 0; }
+.accounts .badge { margin: 0 6px; }
+ul.skills { gap: 0; background: #fff; border: 1px solid #e4e4de; border-radius: 12px; overflow: hidden; }
+ul.skills li + li { border-top: 1px solid #eeeee8; }
+.skill-row { display: flex; gap: 16px; align-items: center; padding: 12px 16px; }
+.skill-main { flex: 1; }
+.skill-row h4 { margin: 0; font-size: 15px; display: flex; gap: 8px; align-items: center; }
+.skill-row p { margin: 2px 0 0; }
+.small { font-size: 13px; }
+.switch { display: flex; gap: 6px; align-items: center; font-size: 14px; color: #555; cursor: pointer; }
+.empty { padding-top: 72px; }

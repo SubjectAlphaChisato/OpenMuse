@@ -5,6 +5,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from opa.connectors.requests import ConnectionRequestOut
+
 
 class ErrorBody(BaseModel):
     code: str
@@ -66,6 +68,7 @@ class MessageOut(BaseModel):
     task_id: str | None
     artifact_ids: list[str]
     created_at: datetime
+    connection_request: ConnectionRequestOut | None = None  # v0.2: an account change the assistant asked for, shown as a card
 
 
 class MessageAccepted(BaseModel):

@@ -76,7 +76,7 @@ class ScriptedAdapter:
         idx = min(idx, len(steps) - 1)
         step = steps[idx] if steps else {"text": "OK."}
         last = self._last_result(messages)
-        calls = [ToolCall(id=f"call_{idx}_{n}", name=c["name"], input=self._resolve_last(self._resolve_auto(c.get("input", {}), c["name"], tools), last))
+        calls = [ToolCall(id=f"call_{idx}_{n}", name=c["name"], input=self._resolve_last(self._resolve_auto(c.get("input", {}), c["name"], limits.get("catalog_tools") or tools), last))
                  for n, c in enumerate(step.get("tool_calls", []))]
         stop = step.get("stop_reason") or ("tool_use" if calls else "end_turn")
         return GenerateResult(

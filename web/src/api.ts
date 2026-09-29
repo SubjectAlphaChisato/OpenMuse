@@ -14,6 +14,20 @@ export interface Conversation { id: string; title: string; is_default: boolean; 
 export interface Message {
   id: string; seq: number; role: "user" | "assistant" | "system"; content: string;
   task_id: string | null; artifact_ids: string[]; created_at: string;
+  connection_request?: ConnectionRequest | null; // v0.2: an account change the assistant asked for
+}
+
+// v0.2 harness: account changes asked for in chat, and skills
+export type RequestStatus = "pending" | "waiting_for_provider" | "completed" | "declined" | "expired" | "superseded" | "failed";
+export interface ConnectionRequest {
+  id: string; action: "connect" | "change" | "disconnect"; provider: string; provider_label: string; connection_id: string | null;
+  account_label: string | null; title: string; changes: { capability: string; label: string; before: string; after: string }[];
+  note: string; reason: string; status: RequestStatus; result: string | null; confirm_label: string; expires_at: string; created_at: string;
+}
+export type SkillStatus = "ready" | "not_connected" | "off" | "needs_reconnect" | "unavailable" | "disabled";
+export interface Skill {
+  name: string; title: string; description: string; summary: string; status: SkillStatus; detail: string; requires: string | null;
+  builtin: boolean; enabled: boolean; tools: string[]; skills: string[];
 }
 export interface Task {
   id: string; conversation_id: string; intent: string; state: TaskState;
@@ -111,17 +125,12 @@ export const api2 = {
   unknownActions: () => req<Action[]>("GET", "/api/actions?state=unknown"),
   reconcile: (id: string) => req<Action>("POST", `/api/actions/${id}/reconcile`),
   resolve: (id: string, outcome: "happened" | "did_not_happen") => req<Action>("POST", `/api/actions/${id}/resolve`, { outcome }),
-  connectors: () => req<Connector[]>("GET", "/api/connectors"),
   connections: () => req<Connection[]>("GET", "/api/connections"),
-  connect: (provider: string) => req<Connection>("POST", "/api/connections", { provider }),
-  setModes: (c: Connection, modes: Record<string, Mode>) => req<Connection>("PATCH", `/api/connections/${c.id}`, { modes, expected_version: c.version }),
-  disconnect: (c: Connection) => req<Connection>("DELETE", `/api/connections/${c.id}`),
   setApprovalMode: (mode: "ask_writes" | "always_ask") => req<Me>("PATCH", "/api/me", { approval_mode: mode }),
-  providerAuthorize: (provider: string, modes: Record<string, Mode> | null, connectionId?: string) =>
-    req<{ authorization_url: string; scopes: string[] }>("POST", `/api/connectors/${provider}/authorize`, { modes, connection_id: connectionId ?? null }),
-  googleAuthorize: (modes: Record<string, Mode>, connectionId?: string) =>
-    req<{ authorization_url: string; scopes: string[] }>("POST", "/api/connectors/google/authorize", { modes, connection_id: connectionId ?? null }),
-  health: (c: Connection) => req<{ status: string; detail: string | null }>("POST", `/api/connections/${c.id}/health`),
+  confirmRequest: (id: string) => req<{ request: ConnectionRequest; authorization_url: string | null }>("POST", `/api/connection-requests/${id}/confirm`),
+  declineRequest: (id: string) => req<ConnectionRequest>("POST", `/api/connection-requests/${id}/decline`),
+  skills: () => req<Skill[]>("GET", "/api/skills"),
+  setSkill: (name: string, enabled: boolean) => req<Skill>("PATCH", `/api/skills/${name}`, { enabled }),
 };
 
 export { req }; // M4: used by apiM4.ts

@@ -479,6 +479,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/connection-requests/{request_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Request
+         * @description Only this authenticated owner action carries out an account change the assistant asked for.
+         */
+        post: operations["confirm_request_api_connection_requests__request_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/connection-requests/{request_id}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Decline Request */
+        post: operations["decline_request_api_connection_requests__request_id__decline_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/connections": {
         parameters: {
             query?: never;
@@ -848,6 +885,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/skills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Skills */
+        get: operations["list_skills_api_skills_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Set Skill
+         * @description Turning a skill off hides it from the assistant and refuses its tools. It changes no account access.
+         */
+        patch: operations["set_skill_api_skills__name__patch"];
+        trace?: never;
+    };
     "/api/tasks": {
         parameters: {
             query?: never;
@@ -1140,6 +1214,23 @@ export interface components {
             /** Modes */
             modes: string[];
         };
+        /** ChangeOut */
+        ChangeOut: {
+            /** After */
+            after: string;
+            /** Before */
+            before: string;
+            /** Capability */
+            capability: string;
+            /** Label */
+            label: string;
+        };
+        /** ConfirmOut */
+        ConfirmOut: {
+            /** Authorization Url */
+            authorization_url?: string | null;
+            request: components["schemas"]["ConnectionRequestOut"];
+        };
         /** ConnectIn */
         ConnectIn: {
             /** Provider */
@@ -1178,6 +1269,45 @@ export interface components {
             version: number;
             /** Warning */
             warning?: string | null;
+        };
+        /** ConnectionRequestOut */
+        ConnectionRequestOut: {
+            /** Account Label */
+            account_label: string | null;
+            /** Action */
+            action: string;
+            /** Changes */
+            changes: components["schemas"]["ChangeOut"][];
+            /** Confirm Label */
+            confirm_label: string;
+            /** Connection Id */
+            connection_id: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Id */
+            id: string;
+            /** Note */
+            note: string;
+            /** Provider */
+            provider: string;
+            /** Provider Label */
+            provider_label: string;
+            /** Reason */
+            reason: string;
+            /** Result */
+            result: string | null;
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
         };
         /** ConnectorOut */
         ConnectorOut: {
@@ -1466,6 +1596,7 @@ export interface components {
         MessageOut: {
             /** Artifact Ids */
             artifact_ids: string[];
+            connection_request?: components["schemas"]["ConnectionRequestOut"] | null;
             /** Content */
             content: string;
             /**
@@ -1638,6 +1769,36 @@ export interface components {
             }[];
             /** Version */
             version: number;
+        };
+        /** SkillOut */
+        SkillOut: {
+            /** Builtin */
+            builtin: boolean;
+            /** Description */
+            description: string;
+            /** Detail */
+            detail: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Name */
+            name: string;
+            /** Requires */
+            requires: string | null;
+            /** Skills */
+            skills: string[];
+            /** Status */
+            status: string;
+            /** Summary */
+            summary: string;
+            /** Title */
+            title: string;
+            /** Tools */
+            tools: string[];
+        };
+        /** SkillPatch */
+        SkillPatch: {
+            /** Enabled */
+            enabled: boolean;
         };
         /** TaskList */
         TaskList: {
@@ -2782,6 +2943,68 @@ export interface operations {
             };
         };
     };
+    confirm_request_api_connection_requests__request_id__confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfirmOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decline_request_api_connection_requests__request_id__decline_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionRequestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_connections_api_connections_get: {
         parameters: {
             query?: never;
@@ -3629,6 +3852,61 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NotificationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_skills_api_skills_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillOut"][];
+                };
+            };
+        };
+    };
+    set_skill_api_skills__name__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SkillPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillOut"];
                 };
             };
             /** @description Validation Error */

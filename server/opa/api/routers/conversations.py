@@ -6,6 +6,7 @@ from sqlalchemy import select
 from opa.api.deps import ClockDep, DbDep, OwnerDep, SettingsDep, get_owned
 from opa.api.schemas import ConversationIn, ConversationOut, MessageAccepted, MessageIn, MessageOut
 from opa.api.tasks_service import add_message, create_task, requeue
+from opa.connectors.requests import describe_many
 from opa.core.canonical import sha256_hex
 from opa.core.errors import Conflict
 from opa.db.models import Conversation, Message, Owner, Task
@@ -57,13 +58,16 @@ async def delete_conversation(conversation_id: str, db: DbDep, owner: OwnerDep, 
 
 
 @router.get("/{conversation_id}/messages", response_model=list[MessageOut])
-async def list_messages(conversation_id: str, db: DbDep, owner: OwnerDep, after_seq: int = 0, limit: int = 200) -> list[MessageOut]:
+async def list_messages(conversation_id: str, db: DbDep, owner: OwnerDep, clock: ClockDep, after_seq: int = 0, limit: int = 200) -> list[MessageOut]:
     conv = await get_owned(db, Conversation, conversation_id, owner)
     limit = max(1, min(limit, 500))
     rows = await db.scalars(
         select(Message).where(Message.conversation_id == conv.id, Message.seq > after_seq).order_by(Message.seq).limit(limit)
     )
-    return [MessageOut.model_validate(r, from_attributes=True) for r in rows]
+    rows = list(rows)
+    cards = await describe_many(db, [r.connection_request_id for r in rows if r.connection_request_id], clock.now())
+    return [MessageOut.model_validate(r, from_attributes=True).model_copy(update={"connection_request": cards.get(r.connection_request_id or "")})
+            for r in rows]
 
 
 @router.post("/{conversation_id}/messages", response_model=MessageAccepted, status_code=202)

@@ -62,18 +62,24 @@ def _authorization_url(settings, provider: str, redirect: str, scope_list: list[
 
 @router.post("/connectors/{provider}/authorize", response_model=AuthorizeOut)
 async def authorize(provider: str, body: AuthorizeIn, db: DbDep, owner: OwnerDep, sess: SessionDep, settings: SettingsDep, clock: ClockDep) -> AuthorizeOut:
+    return await start_authorization(db, owner, sess.id, settings, clock, provider, body.modes, body.connection_id)
+
+
+async def start_authorization(db, owner, session_id: str, settings, clock, provider: str, requested_modes: dict[str, str] | None,
+                              connection_id: str | None, connection_request_id: str | None = None) -> AuthorizeOut:
+    """Begin a sign-in. Shared by the Connections screen and chat requests the owner confirmed."""
     spec = registry.get(provider)
     if spec is None or not spec.oauth:
         raise Invalid(f"{provider} is not a provider you sign in to", code="unknown_provider")
     reason = registry.ready(settings, provider)
     if reason:
         raise Invalid(reason, code="not_configured")
-    requested = body.modes if body.modes is not None else DEFAULT_MODES.get(provider, {c: "read_only" for c in spec.capability_ids})
+    requested = requested_modes if requested_modes is not None else DEFAULT_MODES.get(provider, {c: "read_only" for c in spec.capability_ids})
     unknown = set(requested) - set(spec.capability_ids)
     if unknown:
         raise Invalid(f"unknown capability for {provider}: {sorted(unknown)}")
-    if body.connection_id:
-        conn = await get_owned(db, Connection, body.connection_id, owner)
+    if connection_id:
+        conn = await get_owned(db, Connection, connection_id, owner)
         if conn.provider != provider:
             raise Invalid(f"not a {provider} connection")
     modes = {**{c: "off" for c in spec.capability_ids}, **requested}
@@ -83,14 +89,14 @@ async def authorize(provider: str, body: AuthorizeIn, db: DbDep, owner: OwnerDep
     state = secrets.token_urlsafe(32)
     verifier = generate_token(64)
     redirect = registry.redirect_uri(settings, provider)
-    db.add(OAuthState(state_hash=sha256_hex(state), owner_id=owner.id, session_id=sess.id, provider=provider, code_verifier=verifier,
-                      redirect_uri=redirect, scopes=scope_list, target_connection_id=body.connection_id,
+    db.add(OAuthState(state_hash=sha256_hex(state), owner_id=owner.id, session_id=session_id, provider=provider, code_verifier=verifier,
+                      redirect_uri=redirect, scopes=scope_list, target_connection_id=connection_id, connection_request_id=connection_request_id,
                       requested_modes=modes, expires_at=clock.now() + timedelta(minutes=settings.oauth_state_ttl_minutes)))
     return AuthorizeOut(authorization_url=_authorization_url(settings, provider, redirect, scope_list, state, verifier), scopes=scope_list)
 
 
 def _back(status: str, **params: str) -> RedirectResponse:
-    return RedirectResponse("/?" + urlencode({"oauth": status, **params}), status_code=303)
+    return RedirectResponse("/?" + urlencode({"oauth": status, **{k: v for k, v in params.items() if v}}), status_code=303)
 
 
 @router.get("/oauth/{provider}/callback", include_in_schema=False)
@@ -102,21 +108,22 @@ async def callback(provider: str, request: Request, db: DbDep, owner: OwnerDep, 
     if row is None or row.used_at is not None or row.session_id != sess.id or row.owner_id != owner.id or row.provider != provider:
         return _back("error", reason="This sign-in link is invalid or was already used. Start again from Connections.")
     row.used_at = clock.now()
+    back = {"provider": name, "view": "chat" if row.connection_request_id else ""}
     if row.expires_at <= clock.now():
-        return _back("error", reason=f"The {name} sign-in took too long. Start again from Connections.")
+        return _back("error", reason=f"The {name} sign-in took too long. Start again.", **back)
     if error:
-        return _back("error", reason=f"{name} sign-in was cancelled." if error == "access_denied" else f"{name} returned an error ({error}).")
+        return _back("error", reason=f"{name} sign-in was cancelled." if error == "access_denied" else f"{name} returned an error ({error}).", **back)
     if not code:
-        return _back("error", reason=f"{name} did not return an authorization code.")
+        return _back("error", reason=f"{name} did not return an authorization code.", **back)
     broker = request.app.state.broker
     if broker is None:
-        return _back("error", reason="The connector service is not configured.")
+        return _back("error", reason="The connector service is not configured.", **back)
     candidate = new_id()
     try:
         res = await broker.oauth_exchange(provider, owner_id=owner.id, candidate_connection_id=candidate, target_connection_id=row.target_connection_id,
                                           code=code, code_verifier=row.code_verifier, redirect_uri=row.redirect_uri)
     except ConnectorError as e:
-        return _back("error", reason=e.message)
+        return _back("error", reason=e.message, **back)
     row.code_verifier = "used"
 
     granted = res["granted_scopes"]
@@ -141,4 +148,8 @@ async def callback(provider: str, request: Request, db: DbDep, owner: OwnerDep, 
         note = f"You signed in as {res['label']}, a different account, so it was added separately."
     elif dropped:
         note = f"{name} did not grant everything requested, so {', '.join(dropped)} access is limited. Reconnect to grant it."
-    return _back("connected", connection=conn.id, note=note)
+    if row.connection_request_id:
+        from opa.connectors.requests import finish_from_callback
+
+        await finish_from_callback(db, row.connection_request_id, conn, note, clock)
+    return _back("connected", connection=conn.id, note=note, **back)

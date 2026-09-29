@@ -47,7 +47,7 @@ OPA_BROWSER_URL=http://127.0.0.1:8082 .venv/bin/opa worker
 OPA_WEB_PROXY_URL=http://127.0.0.1:3129 .venv/bin/opa browser                         # isolated Chromium, port 8082
 ```
 
-In the app, open Connections and connect the demo account to try approvals without any external service. Accounts start read only; switch Gmail or Calendar to "Read and propose changes" to let the assistant propose writes, which always wait for your approval.
+In the app, ask in Chat to connect the demo account (for example "Connect my accounts") and confirm the card to try approvals without any external service. Accounts start read only; ask the assistant to let it send email or change events, confirm that card, and every write still waits for your approval in the chat.
 
 For production-like isolation, create separate database roles after migrating (`opa db-roles`) and point the broker at the `opa_broker` role with `OPA_BROKER_DATABASE_URL`. Re-run `opa db-roles` after every migration.
 
@@ -68,6 +68,10 @@ The API binds to `127.0.0.1:8080` only. The worker has no internet route except 
 
 `OPA_MODE=demo` with `OPA_MODEL_PROVIDER=scripted` needs no keys and makes no network calls. For real use set `OPA_MODE=live`, `OPA_MODEL_PROVIDER=anthropic`, and `OPA_ANTHROPIC_API_KEY`. Missing configuration appears as a setup banner in the UI rather than a silent fallback.
 
+## Skills, and managing accounts from the chat
+
+Every capability is a skill (Gmail, Calendar, Drive, Notion, GitHub, files, memory, automations, the browser, and a daily-brief workflow). The assistant loads a skill when a request needs it. To connect an account or change what the assistant may do, ask in Chat, for example "connect my Notion" or "let the assistant send email": it shows a card, and nothing that adds access happens until you confirm it. The app is chat-first: account cards and approvals appear in the conversation, and everything else (tasks, automations, files, memory, the browser, skills and accounts, your data) is in the Menu. The Skills and accounts screen shows each account's access and each skill's status, and lets you turn skills off; it has no connect or change buttons. You can add your own instruction-only skills with `OPA_SKILLS_DIR`; see `docs/skills.md`.
+
 ## Connect Google (live mode)
 
 The app only ever requests these scopes, and write scopes only when you allow changes:
@@ -84,7 +88,7 @@ Plus `openid` and `email` to identify the account.
 2. Configure the **OAuth consent screen**. For personal use choose *External*, keep the app in *Testing*, and add your own Google address as a test user. If you have a Google Workspace domain, *Internal* avoids the limits below.
 3. Create an **OAuth client ID** of type *Web application* with this exact authorized redirect URI: `http://127.0.0.1:8080/api/oauth/google/callback` (or your HTTPS origin plus `/api/oauth/google/callback`, also set as `OPA_GOOGLE_REDIRECT_URI`).
 4. Put the client ID in `OPA_GOOGLE_CLIENT_ID` for the api and broker, and the secret in `OPA_GOOGLE_CLIENT_SECRET` for the broker only. Set `OPA_MODE=live`.
-5. In the app, open Connections and choose **Connect with Google**.
+5. In the app, ask in Chat to connect your Google account and confirm the card; it opens Google's consent screen.
 
 **Limits you should know about.** Gmail read and send are *restricted* scopes. While an External app is in Testing, Google expires its refresh tokens 7 days after sign-in; the app warns you on day 6 and shows **Reconnect**. Publishing an External app with restricted scopes requires Google's verification and a security assessment, which is outside this project. Calendar scopes are *sensitive*, not restricted. Drive read-only is *restricted*, like Gmail. Google Docs, Sheets, and Slides are read as Markdown, CSV, and plain text.
 

@@ -681,6 +681,57 @@
         "title": "CapabilityOut",
         "type": "object"
       },
+      "ChangeOut": {
+        "properties": {
+          "after": {
+            "title": "After",
+            "type": "string"
+          },
+          "before": {
+            "title": "Before",
+            "type": "string"
+          },
+          "capability": {
+            "title": "Capability",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capability",
+          "label",
+          "before",
+          "after"
+        ],
+        "title": "ChangeOut",
+        "type": "object"
+      },
+      "ConfirmOut": {
+        "properties": {
+          "authorization_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization Url"
+          },
+          "request": {
+            "$ref": "#/components/schemas/ConnectionRequestOut"
+          }
+        },
+        "required": [
+          "request"
+        ],
+        "title": "ConfirmOut",
+        "type": "object"
+      },
       "ConnectIn": {
         "properties": {
           "provider": {
@@ -800,6 +851,115 @@
           "is_demo"
         ],
         "title": "ConnectionOut",
+        "type": "object"
+      },
+      "ConnectionRequestOut": {
+        "properties": {
+          "account_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Label"
+          },
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/ChangeOut"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "confirm_label": {
+            "title": "Confirm Label",
+            "type": "string"
+          },
+          "connection_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "provider_label": {
+            "title": "Provider Label",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "action",
+          "provider",
+          "provider_label",
+          "connection_id",
+          "account_label",
+          "title",
+          "changes",
+          "note",
+          "reason",
+          "status",
+          "result",
+          "confirm_label",
+          "expires_at",
+          "created_at"
+        ],
+        "title": "ConnectionRequestOut",
         "type": "object"
       },
       "ConnectorOut": {
@@ -1615,6 +1775,16 @@
             "title": "Artifact Ids",
             "type": "array"
           },
+          "connection_request": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConnectionRequestOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "content": {
             "title": "Content",
             "type": "string"
@@ -2194,6 +2364,95 @@
           "ended_at"
         ],
         "title": "SessionOut",
+        "type": "object"
+      },
+      "SkillOut": {
+        "properties": {
+          "builtin": {
+            "title": "Builtin",
+            "type": "boolean"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "requires": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requires"
+          },
+          "skills": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Skills",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "title",
+          "description",
+          "summary",
+          "status",
+          "detail",
+          "requires",
+          "builtin",
+          "enabled",
+          "tools",
+          "skills"
+        ],
+        "title": "SkillOut",
+        "type": "object"
+      },
+      "SkillPatch": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "SkillPatch",
         "type": "object"
       },
       "TaskList": {
@@ -3966,6 +4225,91 @@
         ]
       }
     },
+    "/api/connection-requests/{request_id}/confirm": {
+      "post": {
+        "description": "Only this authenticated owner action carries out an account change the assistant asked for.",
+        "operationId": "confirm_request_api_connection_requests__request_id__confirm_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Request",
+        "tags": [
+          "skills"
+        ]
+      }
+    },
+    "/api/connection-requests/{request_id}/decline": {
+      "post": {
+        "operationId": "decline_request_api_connection_requests__request_id__decline_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionRequestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Decline Request",
+        "tags": [
+          "skills"
+        ]
+      }
+    },
     "/api/connections": {
       "get": {
         "operationId": "list_connections_api_connections_get",
@@ -5138,6 +5482,84 @@
         "summary": "Mark Read",
         "tags": [
           "events"
+        ]
+      }
+    },
+    "/api/skills": {
+      "get": {
+        "operationId": "list_skills_api_skills_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SkillOut"
+                  },
+                  "title": "Response List Skills Api Skills Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Skills",
+        "tags": [
+          "skills"
+        ]
+      }
+    },
+    "/api/skills/{name}": {
+      "patch": {
+        "description": "Turning a skill off hides it from the assistant and refuses its tools. It changes no account access.",
+        "operationId": "set_skill_api_skills__name__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkillPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Skill",
+        "tags": [
+          "skills"
         ]
       }
     },

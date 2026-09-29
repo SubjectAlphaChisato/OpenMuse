@@ -23,6 +23,43 @@ function Fields({ fields }: { fields: PreviewField[] }) {
   );
 }
 
+/** One pending change, shown exactly as it will be sent. Used on the Approvals screen and inline in the chat. */
+export function ApprovalCard({ a, announce, onDone }: { a: Approval; announce: (s: string) => void; onDone: () => void | Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const titleId = `ap-${a.id}`;
+  const descId = `ap-d-${a.id}`;
+  const decide = async (decision: "allow_once" | "deny") => {
+    setError(""); setBusy(true);
+    try {
+      const r = await api2.decide(a, decision);
+      announce(decision === "allow_once"
+        ? (r.outcome === "approved" ? `Approved: ${a.preview.title}. The assistant will continue.` : `Not approved: this request is ${r.outcome}.`)
+        : (r.outcome === "denied" ? `Denied: ${a.preview.title}.` : `This request is ${r.outcome}.`));
+      await onDone();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Action failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <article className="card approval" aria-labelledby={titleId} aria-describedby={descId}>
+      <h3 id={titleId}>{a.preview.title}</h3>
+      <p id={descId} className="muted">
+        For task “{a.task_intent.slice(0, 80)}”. {a.preview.side_effects} Expires {relative(a.expires_at)}
+        {" "}(<time dateTime={a.expires_at}>{new Date(a.expires_at).toLocaleString()}</time>).
+      </p>
+      <Fields fields={a.preview.fields} />
+      <div className="row">
+        <button className="primary" disabled={busy} onClick={() => decide("allow_once")}>Allow once</button>
+        <button disabled={busy} onClick={() => decide("deny")}>Deny</button>
+      </div>
+      {error && <p role="alert" className="error">{error}</p>}
+    </article>
+  );
+}
+
 export function Approvals({ tick, announce }: { tick: number; announce: (s: string) => void }) {
   const [items, setItems] = useState<Approval[]>([]);
   const [unknown, setUnknown] = useState<Action[]>([]);
@@ -47,30 +84,7 @@ export function Approvals({ tick, announce }: { tick: number; announce: (s: stri
       <h2 id="approvals-h">Approvals</h2>
       {error && <p role="alert" className="error">{error}</p>}
       {items.length === 0 && <p>Nothing is waiting for your approval.</p>}
-      {items.map((a) => {
-        const titleId = `ap-${a.id}`;
-        const descId = `ap-d-${a.id}`;
-        return (
-          <article key={a.id} className="card approval" aria-labelledby={titleId} aria-describedby={descId}>
-            <h3 id={titleId}>{a.preview.title}</h3>
-            <p id={descId} className="muted">
-              For task “{a.task_intent.slice(0, 80)}”. {a.preview.side_effects} Expires {relative(a.expires_at)}
-              {" "}(<time dateTime={a.expires_at}>{new Date(a.expires_at).toLocaleString()}</time>).
-            </p>
-            <Fields fields={a.preview.fields} />
-            <div className="row">
-              <button className="primary" disabled={!!busy} onClick={() => run(a.id, async () => {
-                const r = await api2.decide(a, "allow_once");
-                return r.outcome === "approved" ? `Approved: ${a.preview.title}. The assistant will continue.` : `Not approved: this request is ${r.outcome}.`;
-              })}>Allow once</button>
-              <button disabled={!!busy} onClick={() => run(a.id, async () => {
-                const r = await api2.decide(a, "deny");
-                return r.outcome === "denied" ? `Denied: ${a.preview.title}.` : `This request is ${r.outcome}.`;
-              })}>Deny</button>
-            </div>
-          </article>
-        );
-      })}
+      {items.map((a) => <ApprovalCard key={a.id} a={a} announce={announce} onDone={refresh} />)}
 
       <h2 id="unknown-h">Needs checking</h2>
       {unknown.length === 0 && <p>No changes with an unknown outcome.</p>}
