@@ -9,13 +9,13 @@ from opa.api.tasks_service import add_message, create_task, requeue
 from opa.connectors.requests import describe_many
 from opa.core.canonical import sha256_hex
 from opa.core.errors import Conflict
-from opa.db.models import Conversation, ConversationMember, Message, Owner, Task
+from opa.db.models import Conversation, ConversationMember, Message, User, Task
 from opa.db.outbox import emit
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
 
 
-async def new_conversation(db, owner: Owner, title: str, *, is_default: bool) -> Conversation:
+async def new_conversation(db, owner: User, title: str, *, is_default: bool) -> Conversation:
     """Create a conversation; its creator is its first (and, until shared conversations arrive, only) member."""
     conv = Conversation(owner_id=owner.id, title=title, is_default=is_default)
     db.add(conv)
@@ -25,7 +25,7 @@ async def new_conversation(db, owner: Owner, title: str, *, is_default: bool) ->
     return conv
 
 
-async def ensure_default(db, owner: Owner) -> Conversation:
+async def ensure_default(db, owner: User) -> Conversation:
     conv = await db.scalar(select(Conversation).where(Conversation.owner_id == owner.id, Conversation.is_default.is_(True)))
     if conv is None:
         conv = await new_conversation(db, owner, "Main", is_default=True)

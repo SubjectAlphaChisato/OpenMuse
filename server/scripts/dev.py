@@ -141,11 +141,11 @@ import asyncio, sys
 from sqlalchemy import select
 from opa.api.auth import hash_password
 from opa.db.engine import get_sessionmaker
-from opa.db.models import Owner
+from opa.db.models import User
 async def go():
     async with get_sessionmaker()() as db, db.begin():
-        if not (await db.execute(select(Owner.id))).first():
-            db.add(Owner(email=sys.argv[1], password_hash=hash_password(sys.argv[2])))
+        if not (await db.execute(select(User.id))).first():
+            db.add(User(email=sys.argv[1], password_hash=hash_password(sys.argv[2])))
 asyncio.run(go())
 """
 

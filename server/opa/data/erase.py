@@ -14,7 +14,7 @@ from sqlalchemy import delete, func, select
 from opa.api.actions_service import invalidate_actions, open_actions_for_task
 from opa.api.tasks_service import transition
 from opa.db.models import (TERMINAL_STATES, Action, Approval, Artifact, AuditLog, Automation, BrowserSession, Connection, ConnectionRequest, Conversation, Event, Share,
-                           Export, Memory, Notification, OAuthState, Occurrence, Owner, ProviderEvent, Task)
+                           Export, Memory, Notification, OAuthState, Occurrence, User, ProviderEvent, Task)
 
 BACKUP_NOTE = ("Backups made before now still contain this data until those backups are deleted. "
                "Provider data (sent email, calendar events) stays with the provider.")
@@ -78,7 +78,7 @@ async def erase_owner(sm, settings, clock, owner_id: str, broker=None, browser=N
         await wipe(Notification, mine(Notification))
         await wipe(Event, mine(Event))
         await wipe(AuditLog, AuditLog.owner_id == owner_id)
-        owner = await db.get(Owner, owner_id)
+        owner = await db.get(User, owner_id)
         owner.preferences, owner.assistant_name, owner.response_style = {}, "Assistant", "concise"
         db.add(AuditLog(owner_id=owner_id, actor="owner", type="owner.data_deleted", subject_id=owner_id, sanitized={"counts": counts}))
     # 4. files

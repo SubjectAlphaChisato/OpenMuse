@@ -10,7 +10,7 @@ from opa.api.auth import SESSION_COOKIE, check_csrf, resolve_session
 from opa.core.clock import Clock
 from opa.core.errors import NotFound, Unauthorized
 from opa.core.settings import Settings
-from opa.db.models import Owner, Session
+from opa.db.models import User, Session
 
 
 def get_settings_dep(request: Request) -> Settings:
@@ -40,20 +40,20 @@ async def current_session(request: Request, db: DbDep, clock: ClockDep) -> Sessi
     return sess
 
 
-async def current_owner(db: DbDep, sess: Annotated[Session, Depends(current_session)]) -> Owner:
-    owner = await db.get(Owner, sess.owner_id)
+async def current_owner(db: DbDep, sess: Annotated[Session, Depends(current_session)]) -> User:
+    owner = await db.get(User, sess.owner_id)
     if owner is None:
         raise Unauthorized("sign in required")
     return owner
 
 
-OwnerDep = Annotated[Owner, Depends(current_owner)]
+OwnerDep = Annotated[User, Depends(current_owner)]
 SessionDep = Annotated[Session, Depends(current_session)]
 
 T = TypeVar("T")
 
 
-async def get_owned(db: AsyncSession, model: type[T], obj_id: str, owner: Owner) -> T:
+async def get_owned(db: AsyncSession, model: type[T], obj_id: str, owner: User) -> T:
     """Load an owner-scoped row or 404. Other owners' rows are indistinguishable from missing."""
     obj = await db.scalar(select(model).where(model.id == obj_id, model.owner_id == owner.id))  # type: ignore[attr-defined]
     if obj is None or getattr(obj, "deleted_at", None) is not None:

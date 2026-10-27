@@ -23,7 +23,7 @@ from opa.broker.client import BrokerClient, BrokerUnavailable
 from opa.core.clock import Clock, SystemClock
 from opa.core.ids import new_id
 from opa.core.settings import Settings
-from opa.db.models import Action, Approval, Connection, Conversation, Job, Owner, Task
+from opa.db.models import Action, Approval, Connection, Conversation, Job, User, Task
 from opa.db.outbox import emit
 from opa.memory.retrieval import assemble as assemble_memory
 from opa.sdk.contract import ConnectorError, ToolRequest
@@ -168,7 +168,7 @@ class Worker:
         async with self.sm() as db, db.begin():
             await self._fenced(db, task_id, token)
             task = await db.get(Task, task_id)
-            owner = await db.get(Owner, task.owner_id)
+            owner = await db.get(User, task.owner_id)
             ck = dict(task.checkpoint)
             messages: list[dict[str, Any]] = list(ck.get("messages") or []) or [{"role": "user", "content": task.intent}]
             reply = ck.pop("pending_user_reply", None)

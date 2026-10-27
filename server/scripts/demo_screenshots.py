@@ -82,11 +82,11 @@ import asyncio
 from sqlalchemy import text
 from opa.api.auth import hash_password
 from opa.db.engine import get_sessionmaker
-from opa.db.models import Owner
+from opa.db.models import User
 async def go():
     async with get_sessionmaker()() as db, db.begin():
-        await db.execute(text("TRUNCATE owners CASCADE"))
-        db.add(Owner(email={EMAIL!r}, password_hash=hash_password({PASSWORD!r}), assistant_name="Muse"))
+        await db.execute(text("TRUNCATE users CASCADE"))
+        db.add(User(email={EMAIL!r}, password_hash=hash_password({PASSWORD!r}), assistant_name="Muse"))
 asyncio.run(go())
 """], env=env, check=True)
 procs = [subprocess.Popen(c, env=env, cwd=SERVER, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) for c in (

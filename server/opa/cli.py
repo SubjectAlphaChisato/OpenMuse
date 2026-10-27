@@ -36,14 +36,14 @@ def bootstrap_owner(email: str, reset_password: bool = False) -> None:
 
     from opa.api.auth import hash_password
     from opa.db.engine import get_sessionmaker
-    from opa.db.models import Owner
+    from opa.db.models import User
 
     async def run() -> None:
         async with get_sessionmaker()() as db, db.begin():
-            existing = await db.scalar(select(Owner))
+            existing = await db.scalar(select(User))
             if existing and not reset_password:
                 raise typer.Exit(code=typer.echo("an owner already exists; use --reset-password to change the password") or 1)
-            pw = getpass.getpass("Owner password: ")
+            pw = getpass.getpass("User password: ")
             if len(pw) < 12:
                 typer.echo("password must be at least 12 characters")
                 raise typer.Exit(code=1)
@@ -53,7 +53,7 @@ def bootstrap_owner(email: str, reset_password: bool = False) -> None:
             if existing:
                 existing.password_hash = hash_password(pw)
             else:
-                db.add(Owner(email=email.strip().lower(), password_hash=hash_password(pw)))
+                db.add(User(email=email.strip().lower(), password_hash=hash_password(pw)))
         typer.echo("owner ready")
 
     asyncio.run(run())

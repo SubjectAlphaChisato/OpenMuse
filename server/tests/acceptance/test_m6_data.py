@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from opa.api.app import create_app
 from opa.data.backup import BackupError, backup, restore
-from opa.db.models import Action, FixtureState, Memory, Owner
+from opa.db.models import Action, FixtureState, Memory, User
 from opa.scheduler.service import Scheduler
 from tests.conftest import Client
 from tests.helpers import connect, fixture_state, pending_approval, script, send_call
@@ -36,7 +36,7 @@ async def populate(client, make_worker, sessionmaker):
     assert await make_worker(script({"tool_calls": [send_call(conn["id"])]}, {"text": "Sent."})).run_once()
     await pending_approval(client)
     async with sessionmaker() as db, db.begin():
-        owner = (await db.scalars(select(Owner))).first()
+        owner = (await db.scalars(select(User))).first()
         db.add(Memory(owner_id=owner.id, text="Prefers short answers", kind="user_statement", scope="global", confirmed=True, tags=["style"], source_ref={}))
     return conn, up.json(), auto.json()
 
@@ -63,7 +63,7 @@ async def test_export_is_complete_schema_valid_and_secret_free(client, make_work
     assert connections[0]["account_label"] == "demo@example.test" and "credential_ref" not in connections[0]
     assert json.loads(z.read("data/actions.json"))[0]["tool_name"] == "gmail.send_message"
     async with sessionmaker() as db:
-        pw_hash = (await db.scalars(select(Owner.password_hash))).first()
+        pw_hash = (await db.scalars(select(User.password_hash))).first()
     blob = b"".join(z.read(n) for n in z.namelist())
     for secret in secrets_of(client, settings, pw_hash):
         assert secret and secret.encode() not in blob

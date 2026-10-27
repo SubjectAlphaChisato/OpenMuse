@@ -1,4 +1,4 @@
-"""Owner browser controls (WEB-01, UX-01): sessions, visited URLs, live view, take control, resume, stop."""
+"""User browser controls (WEB-01, UX-01): sessions, visited URLs, live view, take control, resume, stop."""
 from __future__ import annotations
 
 import asyncio

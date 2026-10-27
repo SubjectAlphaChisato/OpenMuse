@@ -167,7 +167,7 @@ async def reconcile(action_id: str, request: Request, db: DbDep, owner: OwnerDep
 
 @router.post("/actions/{action_id}/resolve", response_model=ActionOut)
 async def resolve(action_id: str, body: ResolveIn, db: DbDep, owner: OwnerDep) -> ActionOut:
-    """Owner's manual answer for an unknown outcome (e.g. they checked their Sent folder). Never triggers a resend."""
+    """User's manual answer for an unknown outcome (e.g. they checked their Sent folder). Never triggers a resend."""
     action = await db.scalar(select(Action).where(Action.id == action_id, Action.owner_id == owner.id).with_for_update())
     if action is None:
         raise NotFound("action not found")

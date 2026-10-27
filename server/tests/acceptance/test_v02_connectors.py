@@ -106,7 +106,7 @@ async def test_notion_reads_search_nested_page_and_database(client, fakes, make_
     assert [r["title"] for r in search["data"]["results"]] == ["Design review notes"]
     text_ = page["data"]["content"]["text"]
     assert page["data"]["content"]["untrusted"] is True
-    assert "Decisions" in text_ and "- Ship onboarding v2 in October" in text_ and "  Owner: Priya" in text_  # nested child block
+    assert "Decisions" in text_ and "- Ship onboarding v2 in October" in text_ and "  User: Priya" in text_  # nested child block
     assert "Next review: Thursday" in text_  # fourth block: the adapter followed pagination (two per page)
     assert rows["data"]["rows"][0]["properties"]["Status"] == {"untrusted": True, "text": "In progress", "truncated": False}
     assert private["error"]["code"] == "not_found"

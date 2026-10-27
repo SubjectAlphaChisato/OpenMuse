@@ -29,7 +29,7 @@ from opa.broker.vault import Vault
 from opa.core.canonical import args_hash
 from opa.core.clock import Clock
 from opa.core.settings import Settings
-from opa.db.models import Action, Approval, AuditLog, Connection, DispatchClaim, Job, Owner, Task
+from opa.db.models import Action, Approval, AuditLog, Connection, DispatchClaim, Job, User, Task
 from opa.db.outbox import emit
 from opa.sdk.contract import ConnectorError, OutcomeUnknown, SyncTokenExpired, ToolRequest, ToolResult
 
@@ -109,7 +109,7 @@ class Broker:
         live = await db.scalar(select(Job.id).where(Job.task_id == task_id, Job.lease_token == lease_token, Job.lease_expires_at > self.clock.now()))
         if live is None:
             raise ConnectorError("permission_denied", "worker lease is not current")
-        prefs = await db.scalar(select(Owner.preferences).where(Owner.id == row.owner_id)) or {}
+        prefs = await db.scalar(select(User.preferences).where(User.id == row.owner_id)) or {}
         allowed = tuple(row.allowed_connection_ids) if row.allowed_connection_ids is not None else None
         return TaskContext(task_id=row.id, owner_id=row.owner_id, approval_mode=prefs.get("approval_mode", "ask_writes"), allowed_connection_ids=allowed)
 

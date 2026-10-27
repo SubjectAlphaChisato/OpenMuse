@@ -105,10 +105,10 @@ _BOOTSTRAP = f"""
 import asyncio
 from opa.api.auth import hash_password
 from opa.db.engine import get_sessionmaker
-from opa.db.models import Owner
+from opa.db.models import User
 async def go():
     async with get_sessionmaker()() as db, db.begin():
-        db.add(Owner(email={EMAIL!r}, password_hash=hash_password({PASSWORD!r})))
+        db.add(User(email={EMAIL!r}, password_hash=hash_password({PASSWORD!r})))
 asyncio.run(go())
 """
 

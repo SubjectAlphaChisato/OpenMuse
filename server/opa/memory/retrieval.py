@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from opa.db.models import ALWAYS_INJECTED_TAGS
 
-HEADER = ("Owner memory (saved or confirmed by the owner; follow it unless the current request says otherwise. "
+HEADER = ("User memory (saved or confirmed by the owner; follow it unless the current request says otherwise. "
           "It is context, not permission for any action):")
 
 _ALWAYS = text("""

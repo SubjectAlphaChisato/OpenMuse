@@ -17,7 +17,7 @@ from opa.api.actions_service import invalidate_actions, open_actions_for_task
 from opa.api.tasks_service import transition
 from opa.core.clock import Clock
 from opa.core.errors import Conflict, Invalid, NotFound
-from opa.db.models import TERMINAL_STATES, Automation, Connection, Conversation, Occurrence, Owner, Task
+from opa.db.models import TERMINAL_STATES, Automation, Connection, Conversation, Occurrence, User, Task
 from opa.db.outbox import emit
 from opa.scheduler import timing
 from opa.scheduler.timing import Schedule, ScheduleError
@@ -60,7 +60,7 @@ class AutomationService:
         self.db, self.settings, self.clock = db, settings, clock
 
     # ------------------------------------------------------------ normalization
-    async def normalize(self, owner: Owner, spec: AutomationIn) -> Normalized:
+    async def normalize(self, owner: User, spec: AutomationIn) -> Normalized:
         now = self.clock.now()
         tz = spec.time_zone or owner.time_zone or "UTC"
         try:
@@ -109,13 +109,13 @@ class AutomationService:
         values["conversation_id"] = await self._conversation_id(owner, spec.conversation_id)
         return Normalized(values, description, upcoming)
 
-    async def _usable_connection(self, owner: Owner, connection_id: str) -> Connection:
+    async def _usable_connection(self, owner: User, connection_id: str) -> Connection:
         conn = await self.db.get(Connection, connection_id)
         if conn is None or conn.owner_id != owner.id or conn.status == "disconnected":
             raise ScheduleError(f"connection {connection_id} is not one of your connected accounts")
         return conn
 
-    async def _conversation_id(self, owner: Owner, conversation_id: str | None) -> str:
+    async def _conversation_id(self, owner: User, conversation_id: str | None) -> str:
         if conversation_id:
             conv = await self.db.get(Conversation, conversation_id)
             if conv is None or conv.owner_id != owner.id or conv.deleted_at is not None:
@@ -136,7 +136,7 @@ class AutomationService:
             return self.clock.now()  # first poll establishes the baseline and notifies nothing
         return timing.next_after(schedule_of(a), self.clock.now())
 
-    async def create(self, owner: Owner, spec: AutomationIn, *, confirm: bool, created_by: str, source_task_id: str | None = None) -> Automation:
+    async def create(self, owner: User, spec: AutomationIn, *, confirm: bool, created_by: str, source_task_id: str | None = None) -> Automation:
         n = await self.normalize(owner, spec)
         a = Automation(owner_id=owner.id, created_by=created_by, source_task_id=source_task_id, enabled=confirm, trigger_state={}, **n.values)
         if confirm:
@@ -155,7 +155,7 @@ class AutomationService:
             raise NotFound("automation not found")
         return a
 
-    async def confirm(self, owner: Owner, automation_id: str, expected_version: int) -> Automation:
+    async def confirm(self, owner: User, automation_id: str, expected_version: int) -> Automation:
         a = await self.get(owner.id, automation_id, lock=True)
         self._check_version(a, expected_version)
         if a.confirmed_at is None:
@@ -168,7 +168,7 @@ class AutomationService:
             await emit(self.db, owner.id, "automation.confirmed", {"automation_id": a.id})
         return a
 
-    async def update(self, owner: Owner, automation_id: str, expected_version: int, changes: dict[str, Any]) -> Automation:
+    async def update(self, owner: User, automation_id: str, expected_version: int, changes: dict[str, Any]) -> Automation:
         a = await self.get(owner.id, automation_id, lock=True)
         self._check_version(a, expected_version)
         enabled = changes.pop("enabled", None)
@@ -204,7 +204,7 @@ class AutomationService:
         await emit(self.db, owner.id, "automation.updated", {"automation_id": a.id})
         return a
 
-    async def delete(self, owner: Owner, automation_id: str) -> None:
+    async def delete(self, owner: User, automation_id: str) -> None:
         """DATA-01: disable the schedule, cancel its unfinished runs, and invalidate their proposals."""
         a = await self.get(owner.id, automation_id, lock=True)
         a.deleted_at = self.clock.now()

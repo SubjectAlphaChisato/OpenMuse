@@ -3037,7 +3037,7 @@
     },
     "/api/actions/{action_id}/resolve": {
       "post": {
-        "description": "Owner's manual answer for an unknown outcome (e.g. they checked their Sent folder). Never triggers a resend.",
+        "description": "User's manual answer for an unknown outcome (e.g. they checked their Sent folder). Never triggers a resend.",
         "operationId": "resolve_api_actions__action_id__resolve_post",
         "parameters": [
           {
@@ -5040,7 +5040,7 @@
     },
     "/api/events": {
       "get": {
-        "description": "Owner-scoped SSE with replay. Clients resume with ?after=<id> or Last-Event-ID.\nDelivery polls the outbox table (500 ms); the table is the source of truth (UX-01).",
+        "description": "User-scoped SSE with replay. Clients resume with ?after=<id> or Last-Event-ID.\nDelivery polls the outbox table (500 ms); the table is the source of truth (UX-01).",
         "operationId": "stream_events_api_events_get",
         "parameters": [
           {

@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api", tags=["events"])
 
 @router.get("/events")
 async def stream_events(request: Request, owner: OwnerDep, after: int = 0, max_events: int | None = None) -> StreamingResponse:
-    """Owner-scoped SSE with replay. Clients resume with ?after=<id> or Last-Event-ID.
+    """User-scoped SSE with replay. Clients resume with ?after=<id> or Last-Event-ID.
     Delivery polls the outbox table (500 ms); the table is the source of truth (UX-01)."""
     last_header = request.headers.get("last-event-id")
     cursor = int(last_header) if last_header and last_header.isdigit() else after

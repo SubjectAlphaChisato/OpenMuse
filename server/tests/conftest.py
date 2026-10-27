@@ -20,7 +20,7 @@ from opa.broker.service import Broker
 from opa.core.clock import FakeClock
 from opa.core.settings import Settings
 from opa.db.migrate import upgrade_head
-from opa.db.models import Base, Owner
+from opa.db.models import DEFAULT_ORG_ID, Base, User
 from opa.worker.loop import Worker
 from opa.worker.model import ScriptedAdapter
 
@@ -54,22 +54,23 @@ async def sessionmaker(settings: Settings):
     async with engine.begin() as conn:
         names = ", ".join(t.fullname for t in Base.metadata.sorted_tables)
         await conn.execute(text(f"TRUNCATE {names} RESTART IDENTITY CASCADE"))
+        await conn.execute(text("INSERT INTO organizations (id, name, settings) VALUES (:id, 'Default', '{}')"), {"id": DEFAULT_ORG_ID})
     yield sm
     await engine.dispose()
 
 
 @pytest_asyncio.fixture
-async def owner(sessionmaker) -> Owner:
+async def owner(sessionmaker) -> User:
     async with sessionmaker() as db, db.begin():
-        o = Owner(email="owner@example.com", password_hash=hash_password("correct horse battery"))
+        o = User(email="owner@example.com", password_hash=hash_password("correct horse battery"))
         db.add(o)
     return o
 
 
 @pytest_asyncio.fixture
-async def other_owner(sessionmaker) -> Owner:
+async def other_owner(sessionmaker) -> User:
     async with sessionmaker() as db, db.begin():
-        o = Owner(email="other@example.com", password_hash=hash_password("another long password"))
+        o = User(email="other@example.com", password_hash=hash_password("another long password"))
         db.add(o)
     return o
 

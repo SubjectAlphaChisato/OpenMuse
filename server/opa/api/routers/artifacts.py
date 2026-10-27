@@ -1,4 +1,4 @@
-"""Files and artifacts (ART-01). Owner-authorized only; no public links in v0.1.
+"""Files and artifacts (ART-01). User-authorized only; no public links in v0.1.
 
 Uploads are the raw request body (the file name is a query parameter), which keeps the size
 limit enforceable while streaming and needs no multipart parser.

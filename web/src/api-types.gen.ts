@@ -49,7 +49,7 @@ export interface paths {
         put?: never;
         /**
          * Resolve
-         * @description Owner's manual answer for an unknown outcome (e.g. they checked their Sent folder). Never triggers a resend.
+         * @description User's manual answer for an unknown outcome (e.g. they checked their Sent folder). Never triggers a resend.
          */
         post: operations["resolve_api_actions__action_id__resolve_post"];
         delete?: never;
@@ -706,7 +706,7 @@ export interface paths {
         };
         /**
          * Stream Events
-         * @description Owner-scoped SSE with replay. Clients resume with ?after=<id> or Last-Event-ID.
+         * @description User-scoped SSE with replay. Clients resume with ?after=<id> or Last-Event-ID.
          *     Delivery polls the outbox table (500 ms); the table is the source of truth (UX-01).
          */
         get: operations["stream_events_api_events_get"];

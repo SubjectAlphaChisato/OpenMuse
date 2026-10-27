@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from opa.core.canonical import sha256_hex
 from opa.core.clock import Clock
 from opa.core.errors import Conflict, Invalid, NotFound
-from opa.db.models import AuditLog, Conversation, Memory, Owner
+from opa.db.models import AuditLog, Conversation, Memory, User
 from opa.db.outbox import emit
 
 MAX_TEXT = 1000
@@ -75,7 +75,7 @@ class MemoryService:
         self.clock = clock
 
     async def _lock_owner(self, owner_id: str) -> None:
-        await self.db.scalar(select(Owner.id).where(Owner.id == owner_id).with_for_update())
+        await self.db.scalar(select(User.id).where(User.id == owner_id).with_for_update())
 
     async def confirmed(self, owner_id: str) -> list[Memory]:
         q = select(Memory).where(Memory.owner_id == owner_id, Memory.confirmed.is_(True)).order_by(Memory.created_at, Memory.id)

@@ -23,7 +23,7 @@ from opa.core.canonical import sha256_hex
 from opa.core.clock import Clock
 from opa.core.settings import Settings
 from opa.db.models import (Action, Approval, Artifact, ArtifactVersion, AuditLog, Automation, BrowserSession, Connection, ConnectionRequest, Conversation, Share,
-                           Export, Memory, Message, Notification, Occurrence, Owner, Task)
+                           Export, Memory, Message, Notification, Occurrence, User, Task)
 
 EXPORT_VERSION = "1"
 EXCLUDED = ["password hash", "sessions and cookies", "OAuth state and PKCE verifiers", "provider tokens and the credential vault",
@@ -31,7 +31,7 @@ EXCLUDED = ["password hash", "sessions and cookies", "OAuth state and PKCE verif
 
 # entity -> (model, allowlisted columns)
 ENTITIES: dict[str, tuple[Any, list[str]]] = {
-    "profile": (Owner, ["email", "time_zone", "assistant_name", "response_style", "preferences", "created_at"]),
+    "profile": (User, ["email", "time_zone", "assistant_name", "response_style", "preferences", "created_at"]),
     "conversations": (Conversation, ["id", "title", "is_default", "created_at", "updated_at"]),
     "messages": (Message, ["id", "conversation_id", "seq", "role", "content", "task_id", "artifact_ids", "author_user_id", "created_at"]),
     "tasks": (Task, ["id", "conversation_id", "intent", "state", "plan", "usage", "blocker_code", "blocker_detail", "retry_of", "origin",
@@ -89,7 +89,7 @@ def _plain(v: Any) -> Any:
     return v
 
 
-async def _rows(db: AsyncSession, owner: Owner, name: str) -> list[dict[str, Any]]:
+async def _rows(db: AsyncSession, owner: User, name: str) -> list[dict[str, Any]]:
     model, cols = ENTITIES[name]
     if name == "profile":
         return [{c: _plain(getattr(owner, c)) for c in cols}]
@@ -104,7 +104,7 @@ async def _rows(db: AsyncSession, owner: Owner, name: str) -> list[dict[str, Any
     return [{c: _plain(getattr(r, c)) for c in cols} for r in await db.scalars(q)]
 
 
-async def build_export(db: AsyncSession, settings: Settings, clock: Clock, owner: Owner) -> Export:
+async def build_export(db: AsyncSession, settings: Settings, clock: Clock, owner: User) -> Export:
     now = clock.now()
     store = ArtifactStore(settings.artifact_dir)
     buf = io.BytesIO()

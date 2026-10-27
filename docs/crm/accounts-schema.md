@@ -1,6 +1,12 @@
 # CRM：账户与权限的数据表设计
 
-状态：设计已确认（2026-10-27），实施中。本文是客户管理系统（CRM）第一期的地基：谁能登录、能看什么、能做什么。
+状态：设计已确认（2026-10-27）。**第一期账户表已建（2026-10-28）**：`organizations`、`users`（由 `owners` 改名）、`partners`、`clients`、`client_assignments`，迁移 `f3c1a8d2b9e4`，规则在 `server/opa/crm/accounts.py`。
+
+与设计的两处有意偏差（都为了不动现有登录流程，后续做 SSO/多公司时再改）：
+- `users.password_hash` 暂时仍为必填（设计里为可空，留给企业微信/钉钉登录）。
+- `users.email` 暂时全局唯一（设计里是公司内唯一）；登录只凭邮箱，单公司下两者等价。
+
+尚未实现：`invitations`、`mfa_credentials`、`account_requests`、`sessions` 和 `audit_log` 的扩展列（下一步）。本文是客户管理系统（CRM）第一期的地基：谁能登录、能看什么、能做什么。
 
 ## 已确认的决定
 

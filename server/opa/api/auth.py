@@ -14,7 +14,7 @@ from opa.core.canonical import sha256_hex
 from opa.core.clock import Clock
 from opa.core.errors import Throttled, Unauthorized
 from opa.core.settings import Settings
-from opa.db.models import LoginAttempt, Owner, Session
+from opa.db.models import LoginAttempt, User, Session
 
 SESSION_COOKIE = "opa_session"
 CSRF_HEADER = "x-csrf-token"
@@ -49,7 +49,7 @@ async def login(
     email = email.strip().lower()
     await _throttle(db, f"email:{email}", settings, clock)
     await _throttle(db, f"ip:{client_ip}", settings, clock)
-    owner = await db.scalar(select(Owner).where(Owner.email == email))
+    owner = await db.scalar(select(User).where(User.email == email))
     ok = owner is not None and verify_password(owner.password_hash, password)
     if not ok:
         # The caller records the failed attempt in its own committed transaction,

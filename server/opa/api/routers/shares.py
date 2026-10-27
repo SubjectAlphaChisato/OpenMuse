@@ -21,7 +21,7 @@ from sqlalchemy import func, select, update
 from opa.api.deps import ClockDep, DbDep, OwnerDep, SettingsDep, get_owned
 from opa.core.canonical import sha256_hex
 from opa.core.errors import Invalid
-from opa.db.models import AuditLog, Conversation, Message, Owner, Share
+from opa.db.models import AuditLog, Conversation, Message, User, Share
 from opa.db.outbox import emit
 
 router = APIRouter(prefix="/api", tags=["shares"])
@@ -185,5 +185,5 @@ async def view_share(token: str, request: Request) -> HTMLResponse:
             return _not_found()
         share.view_count += 1
         share.last_viewed_at = now
-        owner = await db.get(Owner, share.owner_id)
+        owner = await db.get(User, share.owner_id)
         return render(share, owner.assistant_name or "Assistant")

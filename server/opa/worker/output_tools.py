@@ -217,13 +217,13 @@ class OutputTools:
 
     async def _automation(self, db: AsyncSession, name: str, a: dict[str, Any], *, owner_id: str, task_id: str, conversation_id: str) -> dict[str, Any]:
         from opa.api.routers.automations import _describe
-        from opa.db.models import Automation, Owner, Task
+        from opa.db.models import Automation, User, Task
         from opa.scheduler import timing
         from opa.scheduler.automations import AutomationIn, AutomationService, CalendarTriggerIn
 
         svc = AutomationService(db, self.settings, self.clock)
         if name == "automation__propose":
-            owner = await db.get(Owner, owner_id)
+            owner = await db.get(User, owner_id)
             spec = AutomationIn(name=a["name"], kind=a["kind"], prompt=a["prompt"], time_zone=a["time_zone"], local_time=a["local_time"],
                                 weekdays=a["weekdays"], run_date=a["run_date"], connection_ids=a["connection_ids"],
                                 calendar=CalendarTriggerIn(**a["calendar"]) if a["calendar"] else None, conversation_id=conversation_id)

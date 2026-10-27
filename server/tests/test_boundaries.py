@@ -59,7 +59,7 @@ async def test_app_role_cannot_read_broker_schema(role_session, sessionmaker):
 
 async def test_broker_role_is_least_privilege(role_session):
     b = role_session("opa_broker")
-    assert await _denied(b, "SELECT password_hash FROM owners")
+    assert await _denied(b, "SELECT password_hash FROM users")
     assert await _denied(b, "SELECT checkpoint FROM tasks")
     assert await _denied(b, "SELECT intent FROM tasks")
     assert await _denied(b, "SELECT content FROM messages")
@@ -68,7 +68,7 @@ async def test_broker_role_is_least_privilege(role_session):
     assert await _denied(b, "SELECT payload FROM events")
     assert await _denied(b, "SELECT body FROM notifications")
     async with b() as db:
-        await db.execute(text("SELECT id, preferences FROM owners"))
+        await db.execute(text("SELECT id, preferences FROM users"))
         await db.execute(text("SELECT id, owner_id, state FROM tasks"))
         await db.execute(text("SELECT * FROM broker.credentials"))
 

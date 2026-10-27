@@ -6,16 +6,18 @@ from typing import Any
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     Computed,
     DateTime,
     ForeignKey,
+    func,
     Index,
     Integer,
     LargeBinary,
     String,
     Text,
+    text,
     UniqueConstraint,
-    func,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -55,11 +57,73 @@ def ts_col(**kw) -> Mapped[datetime]:
     return mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False, **kw)
 
 
-class Owner(Base):
-    __tablename__ = "owners"
+DEFAULT_ORG_ID = "00000000000000000000000000"  # the one organization a single-company deployment has (created by migration)
+ROLES = ("admin", "advisor", "partner")
+USER_STATUSES = ("invited", "active", "suspended", "deactivated")
+
+
+class Organization(Base):
+    """CRM: the company. Business data (clients, partners, products, events) belongs here, never to a person."""
+
+    __tablename__ = "organizations"
     id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    settings: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)  # mfa policy, session length, masking
+    created_at: Mapped[datetime] = ts_col()
+    updated_at: Mapped[datetime] = ts_col(onupdate=func.now())
+
+
+class Partner(Base):
+    """CRM: a partner firm (合伙人). Minimal for phase 1; module 5 adds contacts and onboarding."""
+
+    __tablename__ = "partners"
+    __table_args__ = (CheckConstraint("status IN ('prospect', 'active', 'suspended', 'ended')", name="ck_partners_status"),)
+    id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    created_at: Mapped[datetime] = ts_col()
+    updated_at: Mapped[datetime] = ts_col(onupdate=func.now())
+
+
+class Client(Base):
+    """CRM: a client (客户). Minimal for phase 1; module 1 adds assets and life events."""
+
+    __tablename__ = "clients"
+    __table_args__ = (CheckConstraint("status IN ('active', 'archived')", name="ck_clients_status"),)
+    id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    created_at: Mapped[datetime] = ts_col()
+    updated_at: Mapped[datetime] = ts_col(onupdate=func.now())
+
+
+class User(Base):
+    """A person who signs in: admin, advisor, or partner (one role each). Was `owners` before the CRM work; the
+    personal-workspace tables keep their `owner_id` columns, which now reference this table.
+
+    A partner user belongs to exactly one partner firm; admins and advisors to none (CHECK constraint)."""
+
+    __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint("role IN ('admin', 'advisor', 'partner')", name="ck_users_role"),
+        CheckConstraint("status IN ('invited', 'active', 'suspended', 'deactivated')", name="ck_users_status"),
+        CheckConstraint("(role = 'partner') = (partner_id IS NOT NULL)", name="ck_users_partner_role"),
+    )
+    id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, default=DEFAULT_ORG_ID, index=True)
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
+    phone: Mapped[str | None] = mapped_column(String(32))
+    name: Mapped[str] = mapped_column(String(100), nullable=False, default="")
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    role: Mapped[str] = mapped_column(String(16), nullable=False, default="admin")  # the bootstrap user is the admin
+    partner_id: Mapped[str | None] = mapped_column(ForeignKey("partners.id", ondelete="RESTRICT"))
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    mfa_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deactivated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deactivated_by: Mapped[str | None] = mapped_column(String(26))
     time_zone: Mapped[str] = mapped_column(String(64), default="UTC", nullable=False)
     assistant_name: Mapped[str] = mapped_column(String(64), default="Assistant", nullable=False)
     response_style: Mapped[str] = mapped_column(String(32), default="concise", nullable=False)
@@ -68,10 +132,34 @@ class Owner(Base):
     updated_at: Mapped[datetime] = ts_col(onupdate=func.now())
 
 
+class ClientAssignment(Base):
+    """CRM: which advisors may see a client. Visibility is derived from this table alone (no per-row ACLs).
+
+    A client has exactly one active `primary` advisor at a time (partial unique index); collaborators are optional.
+    Rows are never deleted: ending an assignment sets `ended_at`, keeping the history."""
+
+    __tablename__ = "client_assignments"
+    __table_args__ = (
+        CheckConstraint("kind IN ('primary', 'collaborator')", name="ck_client_assignments_kind"),
+        Index("uq_client_assignments_primary", "client_id", unique=True, postgresql_where=text("kind = 'primary' AND ended_at IS NULL")),
+        Index("ix_client_assignments_user_active", "user_id", postgresql_where=text("ended_at IS NULL")),
+    )
+    id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    client_id: Mapped[str] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    can_edit: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    assigned_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    assigned_at: Mapped[datetime] = ts_col()
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ended_reason: Mapped[str | None] = mapped_column(String(200))
+
+
 class Session(Base):
     __tablename__ = "sessions"
     id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
-    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     csrf_secret: Mapped[str] = mapped_column(String(64), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -88,7 +176,7 @@ class LoginAttempt(Base):
 class Conversation(Base):
     __tablename__ = "conversations"
     id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
-    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -104,7 +192,7 @@ class ConversationMember(Base):
     __table_args__ = (UniqueConstraint("conversation_id", "user_id", name="uq_conversation_members"),)
     id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
     conversation_id: Mapped[str] = mapped_column(ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
-    user_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     role: Mapped[str] = mapped_column(String(16), nullable=False, default="owner")  # owner | member
     added_by: Mapped[str | None] = mapped_column(String(26))
     joined_at: Mapped[datetime] = ts_col()
@@ -118,7 +206,7 @@ class Message(Base):
         UniqueConstraint("owner_id", "client_request_id", name="uq_messages_client_request"),
     )
     id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
-    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     conversation_id: Mapped[str] = mapped_column(
         ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -129,7 +217,7 @@ class Message(Base):
     artifact_ids: Mapped[list[str]] = mapped_column(ARRAY(String), default=list, nullable=False)
     connection_request_id: Mapped[str | None] = mapped_column(String(26))  # v0.2: an in-chat connect/change/disconnect card
     # CRM (reserved for shared conversations): who wrote a user message. Assistant and system messages leave it empty.
-    author_user_id: Mapped[str | None] = mapped_column(ForeignKey("owners.id", ondelete="SET NULL"))
+    author_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     client_request_id: Mapped[str | None] = mapped_column(String(128))
     content_hash: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = ts_col()
@@ -138,7 +226,7 @@ class Message(Base):
 class Task(Base):
     __tablename__ = "tasks"
     id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
-    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     conversation_id: Mapped[str] = mapped_column(ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False)
     intent: Mapped[str] = mapped_column(Text, nullable=False)
     state: Mapped[str] = mapped_column(String(24), default="queued", nullable=False, index=True)
@@ -187,7 +275,7 @@ class Event(Base):
 
     __tablename__ = "events"
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     type: Mapped[str] = mapped_column(String(64), nullable=False)
     task_id: Mapped[str | None] = mapped_column(String(26))
     action_id: Mapped[str | None] = mapped_column(String(26))
@@ -198,7 +286,7 @@ class Event(Base):
 class Notification(Base):
     __tablename__ = "notifications"
     id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
-    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     event_id: Mapped[int | None] = mapped_column(BigInteger)
     type: Mapped[str] = mapped_column(String(64), nullable=False)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
@@ -233,7 +321,7 @@ class Connection(Base):
 
     __tablename__ = "connections"
     id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
-    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     provider: Mapped[str] = mapped_column(String(32), nullable=False)  # google | fixture
     account_label: Mapped[str] = mapped_column(String(320), nullable=False)
     provider_account_id: Mapped[str | None] = mapped_column(String(320))
@@ -255,7 +343,7 @@ class OAuthState(Base):
     __tablename__ = "oauth_states"
     id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
     state_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
-    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     session_id: Mapped[str] = mapped_column(ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False)
     provider: Mapped[str] = mapped_column(String(32), nullable=False)
     code_verifier: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -278,7 +366,7 @@ class ConnectionRequest(Base):
 
     __tablename__ = "connection_requests"
     id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
-    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     conversation_id: Mapped[str] = mapped_column(ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False)
     task_id: Mapped[str | None] = mapped_column(String(26))
     action: Mapped[str] = mapped_column(String(16), nullable=False)  # connect | change | reconnect | disconnect
@@ -300,7 +388,7 @@ class Action(Base):
     __tablename__ = "actions"
     __table_args__ = (UniqueConstraint("task_id", "tool_use_id", name="uq_actions_task_tool_use"),)
     id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
-    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True)
     tool_use_id: Mapped[str] = mapped_column(String(128), nullable=False)
     # null for actions that need no provider account, e.g. a browser navigation that would share private data (M6)
@@ -327,7 +415,7 @@ class Action(Base):
 class Approval(Base):
     __tablename__ = "approvals"
     id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
-    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     action_id: Mapped[str] = mapped_column(ForeignKey("actions.id", ondelete="CASCADE"), nullable=False, index=True)
     task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
     args_hash: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -394,7 +482,7 @@ class Memory(Base):
 
     __tablename__ = "memories"
     id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
-    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     kind: Mapped[str] = mapped_column(String(16), nullable=False)
     scope: Mapped[str] = mapped_column(String(26), nullable=False, default="global")
@@ -415,7 +503,7 @@ class Artifact(Base):
 
     __tablename__ = "artifacts"
     id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
-    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     task_id: Mapped[str | None] = mapped_column(String(26), index=True)
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     mime: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -451,7 +539,7 @@ class Automation(Base):
 
     __tablename__ = "automations"
     id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
-    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     conversation_id: Mapped[str | None] = mapped_column(ForeignKey("conversations.id", ondelete="SET NULL"))
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     kind: Mapped[str] = mapped_column(String(24), nullable=False)
@@ -484,7 +572,7 @@ class Occurrence(Base):
     __tablename__ = "occurrences"
     automation_id: Mapped[str] = mapped_column(ForeignKey("automations.id", ondelete="CASCADE"), primary_key=True)
     scheduled_for: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
-    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     state: Mapped[str] = mapped_column(String(16), nullable=False)
     task_id: Mapped[str | None] = mapped_column(String(26))
     late: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -499,7 +587,7 @@ class ProviderEvent(Base):
     __tablename__ = "provider_events"
     __table_args__ = (UniqueConstraint("connection_id", "resource_id", "version_key", name="uq_provider_events_version"),)
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     connection_id: Mapped[str] = mapped_column(String(26), nullable=False)
     resource_id: Mapped[str] = mapped_column(String(512), nullable=False)
     version_key: Mapped[str] = mapped_column(String(256), nullable=False)
@@ -514,7 +602,7 @@ class ProviderEvent(Base):
 class BrowserSession(Base):
     __tablename__ = "browser_sessions"
     id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
-    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     task_id: Mapped[str | None] = mapped_column(String(26), index=True)
     state: Mapped[str] = mapped_column(String(16), nullable=False, default="active")  # active | stopped
     control: Mapped[str] = mapped_column(String(8), nullable=False, default="agent")  # agent | user
@@ -530,7 +618,7 @@ class BrowserSession(Base):
 class Export(Base):
     __tablename__ = "exports"
     id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
-    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     file_name: Mapped[str] = mapped_column(String(200), nullable=False)
     size: Mapped[int] = mapped_column(BigInteger, nullable=False)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -547,7 +635,7 @@ class Share(Base):
 
     __tablename__ = "shares"
     id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
-    owner_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     conversation_id: Mapped[str] = mapped_column(ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     title: Mapped[str] = mapped_column(Text, nullable=False)

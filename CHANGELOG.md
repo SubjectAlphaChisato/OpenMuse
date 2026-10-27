@@ -2,6 +2,12 @@
 
 All notable changes are recorded here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## Unreleased (CRM phase 1)
+
+### Added
+- **Accounts and permissions, phase 1** (docs/crm/accounts-schema.md): `organizations`; `owners` becomes `users` with `role` (admin / advisor / partner), `status`, `partner_id`, and CHECK constraints; minimal `partners` and `clients`; `client_assignments` with one active primary advisor per client (partial unique index). `opa.crm.accounts` holds the rules the database cannot: advisor visibility is derived from assignments, a new primary ends the old one, and deactivating a user signs them out at once, refuses while they hold clients, and never removes the last admin. Existing owners become active admins of a default organization.
+- Reserved for shared conversations: `conversation_members` and `messages.author_user_id`.
+
 ## Unreleased (v0.2 connectors)
 
 ### Added

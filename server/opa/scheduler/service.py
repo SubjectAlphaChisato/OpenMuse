@@ -23,7 +23,7 @@ from opa.api.tasks_service import add_message, create_task
 from opa.broker.client import BrokerClient, BrokerUnavailable
 from opa.core.clock import Clock
 from opa.core.settings import Settings
-from opa.db.models import TERMINAL_STATES, Action, Automation, Conversation, Occurrence, Owner, ProviderEvent, Task
+from opa.db.models import TERMINAL_STATES, Action, Automation, Conversation, Occurrence, User, ProviderEvent, Task
 from opa.db.outbox import emit
 from opa.scheduler import timing, triggers
 from opa.scheduler.automations import AutomationService, schedule_of
@@ -132,7 +132,7 @@ class Scheduler:
         if conv is None or conv.deleted_at is not None:
             from opa.api.routers.conversations import ensure_default
 
-            conv = await ensure_default(db, await db.get(Owner, a.owner_id))
+            conv = await ensure_default(db, await db.get(User, a.owner_id))
         if a.kind == "calendar_change":
             n = len(occ.detail.get("changes", []))
             note = (f"[Started because {n} event change(s) in the next {a.trigger['window_hours']} hours were detected on calendar "
