@@ -79,6 +79,7 @@ async def add_message(
         client_request_id=client_request_id,
         content_hash=content_hash,
         artifact_ids=artifact_ids or [],
+        author_user_id=conversation.owner_id if role == "user" else None,  # CRM: who said it
     )
     db.add(msg)
     await db.flush()

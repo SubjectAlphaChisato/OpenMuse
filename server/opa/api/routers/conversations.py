@@ -9,18 +9,26 @@ from opa.api.tasks_service import add_message, create_task, requeue
 from opa.connectors.requests import describe_many
 from opa.core.canonical import sha256_hex
 from opa.core.errors import Conflict
-from opa.db.models import Conversation, Message, Owner, Task
+from opa.db.models import Conversation, ConversationMember, Message, Owner, Task
 from opa.db.outbox import emit
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
 
 
+async def new_conversation(db, owner: Owner, title: str, *, is_default: bool) -> Conversation:
+    """Create a conversation; its creator is its first (and, until shared conversations arrive, only) member."""
+    conv = Conversation(owner_id=owner.id, title=title, is_default=is_default)
+    db.add(conv)
+    await db.flush()
+    db.add(ConversationMember(conversation_id=conv.id, user_id=owner.id, role="owner", added_by=owner.id))
+    await db.flush()
+    return conv
+
+
 async def ensure_default(db, owner: Owner) -> Conversation:
     conv = await db.scalar(select(Conversation).where(Conversation.owner_id == owner.id, Conversation.is_default.is_(True)))
     if conv is None:
-        conv = Conversation(owner_id=owner.id, title="Main", is_default=True)
-        db.add(conv)
-        await db.flush()
+        conv = await new_conversation(db, owner, "Main", is_default=True)
     return conv
 
 
@@ -35,9 +43,7 @@ async def list_conversations(db: DbDep, owner: OwnerDep) -> list[ConversationOut
 
 @router.post("", response_model=ConversationOut, status_code=201)
 async def create_conversation(body: ConversationIn, db: DbDep, owner: OwnerDep) -> ConversationOut:
-    conv = Conversation(owner_id=owner.id, title=body.title, is_default=False)
-    db.add(conv)
-    await db.flush()
+    conv = await new_conversation(db, owner, body.title, is_default=False)
     return ConversationOut.model_validate(conv, from_attributes=True)
 
 

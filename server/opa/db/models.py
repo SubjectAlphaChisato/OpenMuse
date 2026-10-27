@@ -96,6 +96,21 @@ class Conversation(Base):
     updated_at: Mapped[datetime] = ts_col(onupdate=func.now())
 
 
+class ConversationMember(Base):
+    """CRM (reserved): the people who can read and write a conversation. Today every conversation has exactly one member,
+    its creator. Shared conversations (phase 2) add more; the assistant then sees only data every member may see."""
+
+    __tablename__ = "conversation_members"
+    __table_args__ = (UniqueConstraint("conversation_id", "user_id", name="uq_conversation_members"),)
+    id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
+    conversation_id: Mapped[str] = mapped_column(ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("owners.id", ondelete="CASCADE"), nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String(16), nullable=False, default="owner")  # owner | member
+    added_by: Mapped[str | None] = mapped_column(String(26))
+    joined_at: Mapped[datetime] = ts_col()
+    left_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class Message(Base):
     __tablename__ = "messages"
     __table_args__ = (
@@ -113,6 +128,8 @@ class Message(Base):
     task_id: Mapped[str | None] = mapped_column(String(26), index=True)
     artifact_ids: Mapped[list[str]] = mapped_column(ARRAY(String), default=list, nullable=False)
     connection_request_id: Mapped[str | None] = mapped_column(String(26))  # v0.2: an in-chat connect/change/disconnect card
+    # CRM (reserved for shared conversations): who wrote a user message. Assistant and system messages leave it empty.
+    author_user_id: Mapped[str | None] = mapped_column(ForeignKey("owners.id", ondelete="SET NULL"))
     client_request_id: Mapped[str | None] = mapped_column(String(128))
     content_hash: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = ts_col()

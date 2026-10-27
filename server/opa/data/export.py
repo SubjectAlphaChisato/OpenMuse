@@ -33,7 +33,7 @@ EXCLUDED = ["password hash", "sessions and cookies", "OAuth state and PKCE verif
 ENTITIES: dict[str, tuple[Any, list[str]]] = {
     "profile": (Owner, ["email", "time_zone", "assistant_name", "response_style", "preferences", "created_at"]),
     "conversations": (Conversation, ["id", "title", "is_default", "created_at", "updated_at"]),
-    "messages": (Message, ["id", "conversation_id", "seq", "role", "content", "task_id", "artifact_ids", "created_at"]),
+    "messages": (Message, ["id", "conversation_id", "seq", "role", "content", "task_id", "artifact_ids", "author_user_id", "created_at"]),
     "tasks": (Task, ["id", "conversation_id", "intent", "state", "plan", "usage", "blocker_code", "blocker_detail", "retry_of", "origin",
                      "allowed_connection_ids", "created_at", "finished_at"]),
     "actions": (Action, ["id", "task_id", "connection_id", "tool_name", "effect", "state", "preview", "provider_refs", "resolution",
