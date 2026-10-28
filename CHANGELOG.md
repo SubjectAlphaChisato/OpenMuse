@@ -7,6 +7,7 @@ All notable changes are recorded here. Versions follow [Semantic Versioning](htt
 ### Added
 - **Accounts and permissions, phase 1** (docs/crm/accounts-schema.md): `organizations`; `owners` becomes `users` with `role` (admin / advisor / partner), `status`, `partner_id`, and CHECK constraints; minimal `partners` and `clients`; `client_assignments` with one active primary advisor per client (partial unique index). `opa.crm.accounts` holds the rules the database cannot: advisor visibility is derived from assignments, a new primary ends the old one, and deactivating a user signs them out at once, refuses while they hold clients, and never removes the last admin. Existing owners become active admins of a default organization.
 - Reserved for shared conversations: `conversation_members` and `messages.author_user_id`.
+- **Accounts, step 2:** invitations (link shown once, stored hashed, 7-day expiry, single use, optional initial client assignments) and account requests (`invite`, `change_role`, `assign_client`, `transfer_client`, `unassign_client`, `suspend`, `reactivate`, `deactivate`, `revoke_sessions`). Adding access waits for an admin's confirmation; an admin's own reduction applies at once; advisors can ask but never confirm; partner users can do neither. Sign-in and every request refuse suspended or deactivated accounts. New endpoints: `/api/team`, `/api/clients`, `/api/partners`, `/api/account-requests`, `/api/invitations`. `/api/me` now returns `name` and `role`.
 
 ## Unreleased (v0.2 connectors)
 

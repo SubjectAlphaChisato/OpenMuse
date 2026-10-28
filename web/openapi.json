@@ -1,17 +1,102 @@
 {
   "components": {
     "schemas": {
-      "AcceptIn": {
+      "AccountRequestOut": {
         "properties": {
-          "expected_version": {
-            "title": "Expected Version",
-            "type": "integer"
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "confirm_label": {
+            "title": "Confirm Label",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "lines": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "requested_by": {
+            "title": "Requested By",
+            "type": "string"
+          },
+          "requires_admin": {
+            "title": "Requires Admin",
+            "type": "boolean"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
           }
         },
         "required": [
-          "expected_version"
+          "id",
+          "action",
+          "title",
+          "lines",
+          "note",
+          "reason",
+          "requested_by",
+          "requires_admin",
+          "status",
+          "result",
+          "confirm_label",
+          "expires_at",
+          "created_at",
+          "decided_at"
         ],
-        "title": "AcceptIn",
+        "title": "AccountRequestOut",
         "type": "object"
       },
       "ActionOut": {
@@ -707,6 +792,73 @@
           "after"
         ],
         "title": "ChangeOut",
+        "type": "object"
+      },
+      "ClientIn": {
+        "properties": {
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ClientIn",
+        "type": "object"
+      },
+      "ClientOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "my_access": {
+            "anyOf": [
+              {
+                "enum": [
+                  "primary",
+                  "collaborator",
+                  "admin"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "My Access"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "primary_advisor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Advisor"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "primary_advisor",
+          "my_access"
+        ],
+        "title": "ClientOut",
         "type": "object"
       },
       "ConfirmOut": {
@@ -1450,6 +1602,40 @@
         "title": "HealthOut",
         "type": "object"
       },
+      "InvitationPreview": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "organization": {
+            "title": "Organization",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "name",
+          "role",
+          "organization",
+          "expires_at"
+        ],
+        "title": "InvitationPreview",
+        "type": "object"
+      },
       "LoginIn": {
         "properties": {
           "email": {
@@ -1494,8 +1680,18 @@
             "title": "Mode",
             "type": "string"
           },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          },
           "response_style": {
             "title": "Response Style",
+            "type": "string"
+          },
+          "role": {
+            "default": "admin",
+            "title": "Role",
             "type": "string"
           },
           "setup_required": {
@@ -1527,6 +1723,69 @@
           "version"
         ],
         "title": "MeOut",
+        "type": "object"
+      },
+      "MemberOut": {
+        "properties": {
+          "clients": {
+            "title": "Clients",
+            "type": "integer"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_login_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Login At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "partner_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partner Id"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name",
+          "role",
+          "status",
+          "partner_id",
+          "clients",
+          "last_login_at"
+        ],
+        "title": "MemberOut",
         "type": "object"
       },
       "MemoryDoc": {
@@ -1966,6 +2225,49 @@
         "title": "OccurrenceOut",
         "type": "object"
       },
+      "PartnerIn": {
+        "properties": {
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "PartnerIn",
+        "type": "object"
+      },
+      "PartnerOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "users": {
+            "title": "Users",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "users"
+        ],
+        "title": "PartnerOut",
+        "type": "object"
+      },
       "PatchIn": {
         "properties": {
           "connection_ids": {
@@ -2242,6 +2544,53 @@
           }
         },
         "title": "RenderIn",
+        "type": "object"
+      },
+      "RequestIn": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "reason": {
+            "default": "",
+            "maxLength": 300,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "RequestIn",
+        "type": "object"
+      },
+      "RequestResult": {
+        "properties": {
+          "invite_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invite Url"
+          },
+          "request": {
+            "$ref": "#/components/schemas/AccountRequestOut"
+          }
+        },
+        "required": [
+          "request"
+        ],
+        "title": "RequestResult",
         "type": "object"
       },
       "ResolveIn": {
@@ -2866,6 +3215,40 @@
         "title": "VersionOut",
         "type": "object"
       },
+      "opa__api__routers__accounts__AcceptIn": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "password": {
+            "maxLength": 200,
+            "minLength": 12,
+            "title": "Password",
+            "type": "string"
+          },
+          "token": {
+            "maxLength": 100,
+            "minLength": 20,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "password"
+        ],
+        "title": "AcceptIn",
+        "type": "object"
+      },
       "opa__api__routers__artifacts__MarkdownIn": {
         "properties": {
           "content": {
@@ -2885,6 +3268,19 @@
           "content"
         ],
         "title": "MarkdownIn",
+        "type": "object"
+      },
+      "opa__api__routers__memory__AcceptIn": {
+        "properties": {
+          "expected_version": {
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "AcceptIn",
         "type": "object"
       },
       "opa__api__routers__memory__MarkdownIn": {
@@ -2914,6 +3310,178 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/account-requests": {
+      "get": {
+        "operationId": "list_requests_api_account_requests_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "default": "pending",
+              "title": "Status",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AccountRequestOut"
+                  },
+                  "title": "Response List Requests Api Account Requests Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Requests",
+        "tags": [
+          "accounts"
+        ]
+      },
+      "post": {
+        "description": "Ask for an account change. An admin's reduction applies at once; everything else waits for an admin.",
+        "operationId": "create_request_api_account_requests_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Request",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/account-requests/{request_id}/confirm": {
+      "post": {
+        "description": "Only this authenticated admin call adds access. The invitation link, if any, is returned here once.",
+        "operationId": "confirm_request_api_account_requests__request_id__confirm_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Request",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/account-requests/{request_id}/decline": {
+      "post": {
+        "operationId": "decline_request_api_account_requests__request_id__decline_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "title": "Request Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountRequestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Decline Request",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
     "/api/actions": {
       "get": {
         "operationId": "list_actions_api_actions_get",
@@ -4366,6 +4934,71 @@
         ]
       }
     },
+    "/api/clients": {
+      "get": {
+        "operationId": "list_clients_api_clients_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ClientOut"
+                  },
+                  "title": "Response List Clients Api Clients Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Clients",
+        "tags": [
+          "accounts"
+        ]
+      },
+      "post": {
+        "description": "A new client belongs to the organization; the advisor who adds it becomes its primary advisor.",
+        "operationId": "create_client_api_clients_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Client",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
     "/api/connection-requests/{request_id}/confirm": {
       "post": {
         "description": "Only this authenticated owner action carries out an account change the assistant asked for.",
@@ -5241,6 +5874,94 @@
         ]
       }
     },
+    "/api/invitations/accept": {
+      "post": {
+        "description": "Creates the account and spends the link. The new member then signs in with the password they chose.",
+        "operationId": "accept_invitation_api_invitations_accept_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/opa__api__routers__accounts__AcceptIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Accept Invitation Api Invitations Accept Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Accept Invitation",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
+    "/api/invitations/{token}": {
+      "get": {
+        "operationId": "preview_invitation_api_invitations__token__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationPreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Invitation",
+        "tags": [
+          "accounts"
+        ]
+      }
+    },
     "/api/me": {
       "get": {
         "operationId": "get_me_api_me_get",
@@ -5545,7 +6266,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AcceptIn"
+                "$ref": "#/components/schemas/opa__api__routers__memory__AcceptIn"
               }
             }
           },
@@ -5675,6 +6396,70 @@
         "summary": "Mark Read",
         "tags": [
           "events"
+        ]
+      }
+    },
+    "/api/partners": {
+      "get": {
+        "operationId": "list_partners_api_partners_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PartnerOut"
+                  },
+                  "title": "Response List Partners Api Partners Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Partners",
+        "tags": [
+          "accounts"
+        ]
+      },
+      "post": {
+        "operationId": "create_partner_api_partners_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PartnerIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Partner",
+        "tags": [
+          "accounts"
         ]
       }
     },
@@ -6063,6 +6848,31 @@
         "summary": "Retry Task",
         "tags": [
           "tasks"
+        ]
+      }
+    },
+    "/api/team": {
+      "get": {
+        "operationId": "team_api_team_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MemberOut"
+                  },
+                  "title": "Response Team Api Team Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Team",
+        "tags": [
+          "accounts"
         ]
       }
     }

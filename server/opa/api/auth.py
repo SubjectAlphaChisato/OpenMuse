@@ -55,6 +55,9 @@ async def login(
         # The caller records the failed attempt in its own committed transaction,
         # because raising here rolls back the request transaction.
         raise Unauthorized("invalid credentials")
+    if owner.status != "active":  # CRM: suspended, deactivated, and not-yet-accepted accounts cannot sign in
+        raise Unauthorized(f"this account is {owner.status}")
+    owner.last_login_at = clock.now()
     raw = secrets.token_urlsafe(32)
     sess = Session(
         owner_id=owner.id,

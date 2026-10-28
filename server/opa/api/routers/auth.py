@@ -42,7 +42,7 @@ async def post_logout(response: Response, db: DbDep, sess: SessionDep) -> Respon
 @router.get("/me", response_model=MeOut)
 async def get_me(owner: OwnerDep, sess: SessionDep, settings: SettingsDep) -> MeOut:
     return MeOut(
-        id=owner.id, email=owner.email, time_zone=owner.time_zone, assistant_name=owner.assistant_name,
+        id=owner.id, email=owner.email, name=owner.name, role=owner.role, time_zone=owner.time_zone, assistant_name=owner.assistant_name,
         response_style=owner.response_style, mode=settings.mode, setup_required=setup_problems(settings),
         csrf_token=sess.csrf_secret, approval_mode=owner.preferences.get("approval_mode", "ask_writes"), version=__version__,
     )

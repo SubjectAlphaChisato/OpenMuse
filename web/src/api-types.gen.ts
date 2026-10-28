@@ -4,6 +4,64 @@
  */
 
 export interface paths {
+    "/api/account-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Requests */
+        get: operations["list_requests_api_account_requests_get"];
+        put?: never;
+        /**
+         * Create Request
+         * @description Ask for an account change. An admin's reduction applies at once; everything else waits for an admin.
+         */
+        post: operations["create_request_api_account_requests_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/account-requests/{request_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Request
+         * @description Only this authenticated admin call adds access. The invitation link, if any, is returned here once.
+         */
+        post: operations["confirm_request_api_account_requests__request_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/account-requests/{request_id}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Decline Request */
+        post: operations["decline_request_api_account_requests__request_id__decline_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/actions": {
         parameters: {
             query?: never;
@@ -479,6 +537,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/clients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Clients */
+        get: operations["list_clients_api_clients_get"];
+        put?: never;
+        /**
+         * Create Client
+         * @description A new client belongs to the organization; the advisor who adds it becomes its primary advisor.
+         */
+        post: operations["create_client_api_clients_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/connection-requests/{request_id}/confirm": {
         parameters: {
             query?: never;
@@ -789,6 +868,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/invitations/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept Invitation
+         * @description Creates the account and spends the link. The new member then signs in with the password they chose.
+         */
+        post: operations["accept_invitation_api_invitations_accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/invitations/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Preview Invitation */
+        get: operations["preview_invitation_api_invitations__token__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me": {
         parameters: {
             query?: never;
@@ -896,6 +1012,24 @@ export interface paths {
         put?: never;
         /** Mark Read */
         post: operations["mark_read_api_notifications__notification_id__read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/partners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Partners */
+        get: operations["list_partners_api_partners_get"];
+        put?: never;
+        /** Create Partner */
+        post: operations["create_partner_api_partners_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1058,14 +1192,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/team": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Team */
+        get: operations["team_api_team_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** AcceptIn */
-        AcceptIn: {
-            /** Expected Version */
-            expected_version: number;
+        /** AccountRequestOut */
+        AccountRequestOut: {
+            /** Action */
+            action: string;
+            /** Confirm Label */
+            confirm_label: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Decided At */
+            decided_at: string | null;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Id */
+            id: string;
+            /** Lines */
+            lines: string[];
+            /** Note */
+            note: string;
+            /** Reason */
+            reason: string;
+            /** Requested By */
+            requested_by: string;
+            /** Requires Admin */
+            requires_admin: boolean;
+            /** Result */
+            result: string | null;
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
         };
         /** ActionOut */
         ActionOut: {
@@ -1275,6 +1458,24 @@ export interface components {
             capability: string;
             /** Label */
             label: string;
+        };
+        /** ClientIn */
+        ClientIn: {
+            /** Name */
+            name: string;
+        };
+        /** ClientOut */
+        ClientOut: {
+            /** Id */
+            id: string;
+            /** My Access */
+            my_access: ("primary" | "collaborator" | "admin") | null;
+            /** Name */
+            name: string;
+            /** Primary Advisor */
+            primary_advisor: string | null;
+            /** Status */
+            status: string;
         };
         /** ConfirmOut */
         ConfirmOut: {
@@ -1522,6 +1723,22 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** InvitationPreview */
+        InvitationPreview: {
+            /** Email */
+            email: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Name */
+            name: string;
+            /** Organization */
+            organization: string;
+            /** Role */
+            role: string;
+        };
         /** LoginIn */
         LoginIn: {
             /** Email */
@@ -1543,14 +1760,43 @@ export interface components {
             id: string;
             /** Mode */
             mode: string;
+            /**
+             * Name
+             * @default
+             */
+            name: string;
             /** Response Style */
             response_style: string;
+            /**
+             * Role
+             * @default admin
+             */
+            role: string;
             /** Setup Required */
             setup_required: string[];
             /** Time Zone */
             time_zone: string;
             /** Version */
             version: string;
+        };
+        /** MemberOut */
+        MemberOut: {
+            /** Clients */
+            clients: number;
+            /** Email */
+            email: string;
+            /** Id */
+            id: string;
+            /** Last Login At */
+            last_login_at: string | null;
+            /** Name */
+            name: string;
+            /** Partner Id */
+            partner_id: string | null;
+            /** Role */
+            role: string;
+            /** Status */
+            status: string;
         };
         /** MemoryDoc */
         MemoryDoc: {
@@ -1713,6 +1959,22 @@ export interface components {
             /** Task Id */
             task_id: string | null;
         };
+        /** PartnerIn */
+        PartnerIn: {
+            /** Name */
+            name: string;
+        };
+        /** PartnerOut */
+        PartnerOut: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Status */
+            status: string;
+            /** Users */
+            users: number;
+        };
         /** PatchIn */
         PatchIn: {
             /** Connection Ids */
@@ -1779,6 +2041,26 @@ export interface components {
         RenderIn: {
             /** Version */
             version?: number | null;
+        };
+        /** RequestIn */
+        RequestIn: {
+            /** Action */
+            action: string;
+            /** Payload */
+            payload?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+        };
+        /** RequestResult */
+        RequestResult: {
+            /** Invite Url */
+            invite_url?: string | null;
+            request: components["schemas"]["AccountRequestOut"];
         };
         /** ResolveIn */
         ResolveIn: {
@@ -1993,12 +2275,26 @@ export interface components {
             /** Version */
             version: number;
         };
+        /** AcceptIn */
+        opa__api__routers__accounts__AcceptIn: {
+            /** Name */
+            name?: string | null;
+            /** Password */
+            password: string;
+            /** Token */
+            token: string;
+        };
         /** MarkdownIn */
         opa__api__routers__artifacts__MarkdownIn: {
             /** Content */
             content: string;
             /** Name */
             name: string;
+        };
+        /** AcceptIn */
+        opa__api__routers__memory__AcceptIn: {
+            /** Expected Version */
+            expected_version: number;
         };
         /** MarkdownIn */
         opa__api__routers__memory__MarkdownIn: {
@@ -2016,6 +2312,132 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_requests_api_account_requests_get: {
+        parameters: {
+            query?: {
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountRequestOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_request_api_account_requests_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_request_api_account_requests__request_id__confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decline_request_api_account_requests__request_id__decline_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountRequestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_actions_api_actions_get: {
         parameters: {
             query?: {
@@ -3045,6 +3467,59 @@ export interface operations {
             };
         };
     };
+    list_clients_api_clients_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientOut"][];
+                };
+            };
+        };
+    };
+    create_client_api_clients_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     confirm_request_api_connection_requests__request_id__confirm_post: {
         parameters: {
             query?: never;
@@ -3670,6 +4145,72 @@ export interface operations {
             };
         };
     };
+    accept_invitation_api_invitations_accept_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["opa__api__routers__accounts__AcceptIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_invitation_api_invitations__token__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationPreview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_me_api_me_get: {
         parameters: {
             query?: never;
@@ -3915,7 +4456,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AcceptIn"];
+                "application/json": components["schemas"]["opa__api__routers__memory__AcceptIn"];
             };
         };
         responses: {
@@ -3989,6 +4530,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NotificationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_partners_api_partners_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerOut"][];
+                };
+            };
+        };
+    };
+    create_partner_api_partners_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PartnerIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerOut"];
                 };
             };
             /** @description Validation Error */
@@ -4261,6 +4855,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    team_api_team_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberOut"][];
                 };
             };
         };

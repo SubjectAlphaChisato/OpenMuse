@@ -218,6 +218,7 @@ class Message(Base):
     connection_request_id: Mapped[str | None] = mapped_column(String(26))  # v0.2: an in-chat connect/change/disconnect card
     # CRM (reserved for shared conversations): who wrote a user message. Assistant and system messages leave it empty.
     author_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    account_request_id: Mapped[str | None] = mapped_column(String(26))  # CRM: an account change asked for in chat, shown as a card
     client_request_id: Mapped[str | None] = mapped_column(String(128))
     content_hash: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = ts_col()
@@ -645,4 +646,64 @@ class Share(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     view_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     last_viewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = ts_col()
+
+
+ACCOUNT_ACTIONS = ("invite", "change_role", "assign_client", "transfer_client", "unassign_client", "suspend", "reactivate", "deactivate",
+                   "revoke_sessions")
+REQUEST_STATUSES = ("pending", "completed", "declined", "expired", "superseded", "failed")
+
+
+class Invitation(Base):
+    """CRM: an invitation to join the organization. The link token is stored only as a hash and shown once."""
+
+    __tablename__ = "invitations"
+    __table_args__ = (
+        CheckConstraint("role IN ('admin', 'advisor', 'partner')", name="ck_invitations_role"),
+        CheckConstraint("(role = 'partner') = (partner_id IS NOT NULL)", name="ck_invitations_partner_role"),
+    )
+    id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    email: Mapped[str] = mapped_column(String(320), nullable=False)
+    phone: Mapped[str | None] = mapped_column(String(32))
+    name: Mapped[str] = mapped_column(String(100), nullable=False, default="")
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    partner_id: Mapped[str | None] = mapped_column(ForeignKey("partners.id", ondelete="RESTRICT"))
+    initial_assignments: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)  # [{client_id, kind}]
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    invited_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    accepted_user_id: Mapped[str | None] = mapped_column(String(26))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = ts_col()
+
+
+class AccountRequest(Base):
+    """CRM: an account change someone asked for (an advisor, or the assistant on their behalf).
+
+    Anything that adds access needs an admin's confirmation through the API; an admin's own reduction applies at
+    once. `payload` holds validated fields only; the card renders from it, never from free text."""
+
+    __tablename__ = "account_requests"
+    __table_args__ = (
+        CheckConstraint("action IN ('invite', 'change_role', 'assign_client', 'transfer_client', 'unassign_client', 'suspend', "
+                        "'reactivate', 'deactivate', 'revoke_sessions')", name="ck_account_requests_action"),
+        CheckConstraint("status IN ('pending', 'completed', 'declined', 'expired', 'superseded', 'failed')", name="ck_account_requests_status"),
+    )
+    id: Mapped[str] = mapped_column(String(26), primary_key=True, default=new_id)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    requested_by: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    conversation_id: Mapped[str | None] = mapped_column(String(26))
+    task_id: Mapped[str | None] = mapped_column(String(26))
+    action: Mapped[str] = mapped_column(String(24), nullable=False)
+    target_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    requires_admin: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    decided_by: Mapped[str | None] = mapped_column(String(26))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    result: Mapped[str | None] = mapped_column(Text)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = ts_col()

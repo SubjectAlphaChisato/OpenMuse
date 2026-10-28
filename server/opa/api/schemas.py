@@ -26,6 +26,8 @@ class LoginIn(BaseModel):
 class MeOut(BaseModel):
     id: str
     email: str
+    name: str = ""
+    role: str = "admin"  # CRM: admin | advisor | partner
     time_zone: str
     assistant_name: str
     response_style: str

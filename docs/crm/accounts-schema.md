@@ -6,7 +6,11 @@
 - `users.password_hash` 暂时仍为必填（设计里为可空，留给企业微信/钉钉登录）。
 - `users.email` 暂时全局唯一（设计里是公司内唯一）；登录只凭邮箱，单公司下两者等价。
 
-尚未实现：`invitations`、`mfa_credentials`、`account_requests`、`sessions` 和 `audit_log` 的扩展列（下一步）。本文是客户管理系统（CRM）第一期的地基：谁能登录、能看什么、能做什么。
+**账户第二步已建（2026-10-29）**：`invitations`、`account_requests`、`messages.account_request_id`，迁移 `a7d4e2c1b8f3`；规则在 `server/opa/crm/account_requests.py`，接口在 `server/opa/api/routers/accounts.py`（`/api/team`、`/api/clients`、`/api/partners`、`/api/account-requests`、`/api/invitations`）。登录和每次请求都会拒绝非 `active` 的账号。邀请链接只在管理员确认的那次响应里返回一次，数据库只存哈希。
+
+与设计的一处补充：`unassign_client` 作为「减权限」动作加入；主责顾问不能被直接收回，只能转移（客户任何时候都有主责）。被拒绝的变更（如停用仍持有客户的人）整体回滚、不留记录，错误直接返回给发起人。
+
+尚未实现：`mfa_credentials`、`sessions` 和 `audit_log` 的扩展列、聊天里的确认卡和助理工具（下一步）。本文是客户管理系统（CRM）第一期的地基：谁能登录、能看什么、能做什么。
 
 ## 已确认的决定
 

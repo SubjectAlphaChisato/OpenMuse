@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from opa.api.auth import SESSION_COOKIE, check_csrf, resolve_session
 from opa.core.clock import Clock
-from opa.core.errors import NotFound, Unauthorized
+from opa.core.errors import Forbidden, NotFound, Unauthorized
 from opa.core.settings import Settings
 from opa.db.models import User, Session
 
@@ -42,13 +42,23 @@ async def current_session(request: Request, db: DbDep, clock: ClockDep) -> Sessi
 
 async def current_owner(db: DbDep, sess: Annotated[Session, Depends(current_session)]) -> User:
     owner = await db.get(User, sess.owner_id)
-    if owner is None:
+    if owner is None or owner.status != "active":  # a suspended or deactivated account loses access on its next request
         raise Unauthorized("sign in required")
     return owner
 
 
+def require_roles(*roles: str):
+    async def dep(user: Annotated[User, Depends(current_owner)]) -> User:
+        if user.role not in roles:
+            raise Forbidden(f"this needs the {' or '.join(roles)} role")
+        return user
+    return dep
+
+
 OwnerDep = Annotated[User, Depends(current_owner)]
 SessionDep = Annotated[Session, Depends(current_session)]
+AdminDep = Annotated[User, Depends(require_roles("admin"))]
+StaffDep = Annotated[User, Depends(require_roles("admin", "advisor"))]  # CRM: admins and advisors; never partner users
 
 T = TypeVar("T")
 

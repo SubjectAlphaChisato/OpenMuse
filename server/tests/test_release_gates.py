@@ -15,7 +15,9 @@ from httpx import ASGITransport, AsyncClient
 from opa.broker.app import create_broker_app
 
 OPA = Path(__file__).resolve().parents[1] / "opa"
-PUBLIC = {("POST", "/api/auth/login"), ("GET", "/api/oauth/google/callback")}  # the callback still requires a session (checked below)
+PUBLIC = {("POST", "/api/auth/login"), ("GET", "/api/oauth/google/callback"),  # the callback still requires a session (checked below)
+          ("GET", "/api/invitations/{token}"), ("POST", "/api/invitations/accept")}  # CRM: the invitee has no account yet
+ANON_OK = {("GET", "/api/invitations/{token}"): (404,), ("POST", "/api/invitations/accept"): (422,)}  # never 200 without a valid link
 
 
 def _routes(app):
@@ -32,6 +34,9 @@ async def test_every_route_rejects_anonymous_callers(app, anon, owner):
         r = await anon.request(method, concrete, json={})
         if (method, path) == ("GET", "/api/oauth/google/callback"):
             assert r.status_code in (401, 303), (method, path)
+            continue
+        if (method, path) in ANON_OK:
+            assert r.status_code in ANON_OK[(method, path)], (method, path, r.status_code)
             continue
         assert r.status_code == 401, (method, path, r.status_code)
         checked += 1

@@ -18,6 +18,7 @@ from opa.api.routers import browser as browser_router
 from opa.api.routers import data as data_router
 from opa.api.routers import skills as skills_router  # v0.2 harness
 from opa.api.routers import shares as shares_router  # v0.2 sharing
+from opa.api.routers import accounts as accounts_router  # CRM
 from opa.api.routers.artifacts import router as artifacts_router  # M4
 from opa.api.routers.memory import router as memory_router  # M4
 from opa.core.clock import Clock, SystemClock
@@ -84,6 +85,7 @@ def create_app(settings: Settings | None = None, clock: Clock | None = None, ses
     app.include_router(skills_router.router)
     app.include_router(shares_router.router)
     app.include_router(shares_router.public)  # /s/{token}: before the web app's catch-all
+    app.include_router(accounts_router.router)
     app.include_router(browser_router.router)
     app.include_router(data_router.router)
     app.include_router(artifacts_router)
