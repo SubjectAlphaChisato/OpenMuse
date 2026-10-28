@@ -22,6 +22,7 @@ Every capability the assistant has is a **skill**: a folder with a `SKILL.md` fi
 | `automations` | `automation__propose`, `automation__list`, `automation__trigger_details` | — |
 | `browser` | `browser__*` | the browser service |
 | `daily-brief` | (uses `gmail`, `calendar`, `files`) | Gmail and Calendar access |
+| `team` | `accounts__list`, `accounts__request` | — (CRM: invite, roles, client access; see `docs/crm/accounts-schema.md`) |
 
 Always available, outside any skill: `ask_user`, `note`, `skill__load`, `connections__list`, `connections__request`.
 

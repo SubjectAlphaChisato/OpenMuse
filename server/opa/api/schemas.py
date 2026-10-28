@@ -6,6 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from opa.connectors.requests import ConnectionRequestOut
+from opa.crm.account_requests import AccountRequestOut
 
 
 class ErrorBody(BaseModel):
@@ -71,6 +72,7 @@ class MessageOut(BaseModel):
     artifact_ids: list[str]
     created_at: datetime
     connection_request: ConnectionRequestOut | None = None  # v0.2: an account change the assistant asked for, shown as a card
+    account_request: AccountRequestOut | None = None  # CRM: a team/account change asked for in chat, shown as a card
 
 
 class MessageAccepted(BaseModel):

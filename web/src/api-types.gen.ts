@@ -1891,6 +1891,7 @@ export interface components {
         };
         /** MessageOut */
         MessageOut: {
+            account_request?: components["schemas"]["AccountRequestOut"] | null;
             /** Artifact Ids */
             artifact_ids: string[];
             connection_request?: components["schemas"]["ConnectionRequestOut"] | null;

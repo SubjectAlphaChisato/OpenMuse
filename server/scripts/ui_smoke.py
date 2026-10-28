@@ -45,6 +45,12 @@ match:
           - name: connections__request
             input: {action: change, provider: fixture, connection_id: null, modes: {gmail: read_write}, reason: "You asked me to send email for you."}
       - text: Confirm the card and I can propose emails for you to approve.
+  - contains: "Invite Xiao Wang"
+    steps:
+      - tool_calls:
+          - name: accounts__request
+            input: {action: invite, email: xiaowang@example.com, name: 小王, role: advisor, partner_id: null, user_email: null, client_name: null, kind: null, can_edit: null, initial_assignments: null, reason: "You asked me to invite a new advisor."}
+      - text: The invitation card is in the chat; confirm it to get the link.
   - contains: "Connect the demo account"
     steps:
       - tool_calls:
@@ -223,6 +229,31 @@ def _m2(page, snap) -> None:
         card.get_by_role("button", name="Connect", exact=True).click()
         expect(card.get_by_text("Done: Connected demo@example.test.")).to_be_visible()
         print("PASS the assistant asks in chat; the owner's confirmation connects the demo account")
+        # ---- CRM: invite a colleague from the chat; the admin's click creates the link; the invitee joins through it
+        page.get_by_role("textbox", name="Message").fill("Invite Xiao Wang as an advisor")
+        page.keyboard.press("Enter")
+        invite = page.get_by_role("article", name="邀请 小王 加入")
+        expect(invite.get_by_role("button", name="发出邀请")).to_be_visible(timeout=10_000)
+        expect(invite.get_by_text("角色：顾问")).to_be_visible()
+        snap(page, "5c-chat-invite-card")
+        invite.get_by_role("button", name="发出邀请").click()
+        link = invite.get_by_label("邀请链接")
+        expect(link).to_be_visible()
+        invite_url = link.input_value().replace("http://127.0.0.1:8080", f"http://127.0.0.1:{PORT}")
+        joiner = page.context.browser.new_context().new_page()
+        joiner.goto(invite_url)
+        expect(joiner.get_by_role("heading", name="加入 Default")).to_be_visible()
+        joiner.get_by_label("设置密码（至少 12 位）").fill("xiaowang-password-123")
+        joiner.get_by_label("再输一次").fill("xiaowang-password-123")
+        _axe(joiner, "5d-accept-invitation")
+        joiner.get_by_role("button", name="加入并登录").click()
+        expect(joiner.get_by_role("textbox", name="Message")).to_be_visible(timeout=10_000)  # signed in as the new advisor
+        joiner.context.close()
+        stranger = page.context.browser.new_context().new_page()  # not signed in: the spent link must not work again
+        stranger.goto(invite_url)
+        expect(stranger.get_by_role("heading", name="邀请链接不可用")).to_be_visible()
+        stranger.context.close()
+        print("PASS an invitation asked for in chat, confirmed by the admin, lets a new advisor join once")
         go(page, "Skills and accounts")
         gmail = page.get_by_role("article", name="Gmail skill")
         expect(gmail.get_by_text("Ready")).to_be_visible()

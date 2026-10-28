@@ -7,6 +7,7 @@ from opa.api.deps import ClockDep, DbDep, OwnerDep, SettingsDep, get_owned
 from opa.api.schemas import ConversationIn, ConversationOut, MessageAccepted, MessageIn, MessageOut
 from opa.api.tasks_service import add_message, create_task, requeue
 from opa.connectors.requests import describe_many
+from opa.crm.account_requests import describe_many as describe_account_requests
 from opa.core.canonical import sha256_hex
 from opa.core.errors import Conflict
 from opa.db.models import Conversation, ConversationMember, Message, User, Task
@@ -72,7 +73,9 @@ async def list_messages(conversation_id: str, db: DbDep, owner: OwnerDep, clock:
     )
     rows = list(rows)
     cards = await describe_many(db, [r.connection_request_id for r in rows if r.connection_request_id], clock.now())
-    return [MessageOut.model_validate(r, from_attributes=True).model_copy(update={"connection_request": cards.get(r.connection_request_id or "")})
+    acct = await describe_account_requests(db, [r.account_request_id for r in rows if r.account_request_id], clock.now())
+    return [MessageOut.model_validate(r, from_attributes=True).model_copy(update={
+                "connection_request": cards.get(r.connection_request_id or ""), "account_request": acct.get(r.account_request_id or "")})
             for r in rows]
 
 

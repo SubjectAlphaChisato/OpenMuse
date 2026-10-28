@@ -2027,6 +2027,16 @@
       },
       "MessageOut": {
         "properties": {
+          "account_request": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountRequestOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "artifact_ids": {
             "items": {
               "type": "string"

@@ -29,6 +29,8 @@ export type Contract = [
   Expect<Ok<Covered<UI.BrowserSession, S["SessionOut"]>>>,
   Expect<Ok<Covered<UI.ExportInfo, S["ExportOut"]>>>,
   Expect<Ok<Covered<UI.ConnectionRequest, S["ConnectionRequestOut"]>>>,
+  Expect<Ok<Covered<UI.AccountRequest, S["AccountRequestOut"]>>>,
+  Expect<Ok<Covered<UI.InvitationPreview, S["InvitationPreview"]>>>,
   Expect<Ok<Covered<UI.Skill, S["SkillOut"]>>>,
   Expect<Ok<Covered<UI.Share, S["ShareOut"]>>>,
 ];

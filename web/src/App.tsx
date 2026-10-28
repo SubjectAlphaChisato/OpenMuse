@@ -7,6 +7,8 @@ import { Data } from "./screens/Data"; // M6
 import { ArtifactLinks, Files } from "./screens/Files"; // M4
 import { Memory } from "./screens/Memory"; // M4
 import { ConnectionCard } from "./screens/ConnectionCard"; // v0.2 harness
+import { AccountRequestCard } from "./screens/AccountRequestCard"; // CRM
+import { AcceptInvitation } from "./screens/AcceptInvitation"; // CRM
 import { Skills } from "./screens/Skills"; // v0.2 harness
 import { ShareDialog, SharedLinks } from "./screens/Share"; // v0.2 sharing
 
@@ -35,6 +37,8 @@ export function App() {
   useEffect(() => { void load(); }, [load]);
 
   if (!checked) return <p role="status" className="center">Loading…</p>;
+  const invite = window.location.pathname.match(/^\/invite\/([^/]+)$/);
+  if (!me && invite) return <AcceptInvitation token={invite[1]} onDone={load} />;
   if (!me) return <Login onDone={load} />;
   return <Shell me={me} onLogout={async () => { await api.logout(); setMe(null); }} />;
 }
@@ -87,6 +91,7 @@ function Shell({ me: initialMe, onLogout }: { me: Me; onLogout: () => void }) {
     if (type === "approval.requested") setLive("An action needs your approval. It is shown in the chat.");
     if (type === "connection.reauth_required") setLive("A connected account needs reconnecting. Ask in the chat to reconnect it.");
     if (type === "connection_request.created") setLive("The assistant is asking about an account. Check the chat.");
+    if (type === "account_request.created") setLive("The assistant is asking about a team member or client access. Check the chat.");
   }), []);
   useEffect(() => { api2.approvals().then((a) => setPending(a.length)).catch(() => undefined); }, [tick]);
   useEffect(() => {
@@ -141,7 +146,7 @@ function Shell({ me: initialMe, onLogout }: { me: Me; onLogout: () => void }) {
       <div role="status" aria-live="polite" className="sr-only">{live}</div>
       <main>
         {screen === "chat" && notice && <p role={notice.ok ? "status" : "alert"} className={notice.ok ? "notice" : "error"}>{notice.text}</p>}
-        {screen === "chat" && <Chat tick={tick} focusConv={focusConv} announce={setLive} onOpenFile={(id) => { setFileFocus(id); setScreen("files"); }} />}
+        {screen === "chat" && <Chat me={me} tick={tick} focusConv={focusConv} announce={setLive} onOpenFile={(id) => { setFileFocus(id); setScreen("files"); }} />}
         {screen === "skills" && <Skills me={me} onMe={setMe} tick={tick} announce={setLive} />}
         {screen === "shares" && <SharedLinks tick={tick} announce={setLive} />}
         {screen === "tasks" && <Tasks tick={tick} />}
@@ -164,7 +169,7 @@ const SUGGESTIONS = [
   "Remind me every weekday at 8:00 to review email",
 ];
 
-function Chat({ tick, focusConv, announce, onOpenFile }: { tick: number; focusConv: string; announce: (msg: string) => void; onOpenFile: (id: string) => void }) {
+function Chat({ me, tick, focusConv, announce, onOpenFile }: { me: Me; tick: number; focusConv: string; announce: (msg: string) => void; onOpenFile: (id: string) => void }) {
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [active, setActive] = useState<string>("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -226,12 +231,13 @@ function Chat({ tick, focusConv, announce, onOpenFile }: { tick: number; focusCo
           const t = m.task_id ? tasks[m.task_id] : undefined;
           const asks = m.role === "user" && m.task_id ? approvals.filter((a) => a.task_id === m.task_id) : [];
           return (<Fragment key={m.id}>
-            <li className={`msg ${m.role}${m.connection_request ? " has-card" : ""}`}>
+            <li className={`msg ${m.role}${m.connection_request || m.account_request ? " has-card" : ""}`}>
               <h3 className="sr-only">{m.role === "user" ? "You" : m.role === "system" ? "System" : "Assistant"}</h3>
-              <p className={m.connection_request ? "sr-only" : undefined}>{m.content}</p>
+              <p className={m.connection_request || m.account_request ? "sr-only" : undefined}>{m.content}</p>
               {t && m.role === "user" && t.state !== "succeeded" && <TaskChip task={t} />}
               <ArtifactLinks ids={m.artifact_ids} onOpen={onOpenFile} />
               {m.connection_request && <ConnectionCard req={m.connection_request} onChanged={async (msg) => { announce(msg); await reload(); }} />}
+              {m.account_request && <AccountRequestCard req={m.account_request} me={me} onChanged={async (msg) => { announce(msg); await reload(); }} />}
             </li>
             {asks.map((a) => (
               <li key={a.id} className="msg has-card">

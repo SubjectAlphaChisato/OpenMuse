@@ -6,6 +6,7 @@ export type TaskState =
   | "blocked" | "succeeded" | "failed" | "cancelled";
 
 export interface Me {
+  name: string; role: "admin" | "advisor" | "partner";
   id: string; email: string; time_zone: string; assistant_name: string;
   response_style: string; mode: "demo" | "live"; setup_required: string[]; csrf_token: string;
   approval_mode: "ask_writes" | "always_ask";
@@ -15,10 +16,18 @@ export interface Message {
   id: string; seq: number; role: "user" | "assistant" | "system"; content: string;
   task_id: string | null; artifact_ids: string[]; created_at: string;
   connection_request?: ConnectionRequest | null; // v0.2: an account change the assistant asked for
+  account_request?: AccountRequest | null; // CRM: a team/account change asked for in chat
 }
 
 // v0.2 harness: account changes asked for in chat, and skills
 export type RequestStatus = "pending" | "waiting_for_provider" | "completed" | "declined" | "expired" | "superseded" | "failed";
+// CRM: team and account changes asked for in chat
+export interface AccountRequest {
+  id: string; action: string; title: string; lines: string[]; note: string; reason: string; requested_by: string; requires_admin: boolean;
+  status: "pending" | "completed" | "declined" | "expired" | "superseded" | "failed"; result: string | null; confirm_label: string;
+  expires_at: string; created_at: string; decided_at: string | null;
+}
+export interface InvitationPreview { email: string; name: string; role: string; organization: string; expires_at: string }
 export interface ConnectionRequest {
   id: string; action: "connect" | "change" | "disconnect"; provider: string; provider_label: string; connection_id: string | null;
   account_label: string | null; title: string; changes: { capability: string; label: string; before: string; after: string }[];
@@ -133,6 +142,10 @@ export const api2 = {
   setApprovalMode: (mode: "ask_writes" | "always_ask") => req<Me>("PATCH", "/api/me", { approval_mode: mode }),
   confirmRequest: (id: string) => req<{ request: ConnectionRequest; authorization_url: string | null }>("POST", `/api/connection-requests/${id}/confirm`),
   declineRequest: (id: string) => req<ConnectionRequest>("POST", `/api/connection-requests/${id}/decline`),
+  confirmAccountRequest: (id: string) => req<{ request: AccountRequest; invite_url: string | null }>("POST", `/api/account-requests/${id}/confirm`),
+  declineAccountRequest: (id: string) => req<AccountRequest>("POST", `/api/account-requests/${id}/decline`),
+  invitation: (token: string) => req<InvitationPreview>("GET", `/api/invitations/${encodeURIComponent(token)}`),
+  acceptInvitation: (token: string, password: string, name: string | null) => req<{ email: string; role: string }>("POST", "/api/invitations/accept", { token, password, name }),
   skills: () => req<Skill[]>("GET", "/api/skills"),
   createShare: (conversationId: string, body: { title: string | null; message_ids: string[] | null; expires_in_days: 1 | 7 | 30 }) =>
     req<{ share: Share; url: string }>("POST", `/api/conversations/${conversationId}/shares`, body),
